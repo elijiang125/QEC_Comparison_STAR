@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qec_star"
+version = "0.1.0"
+description = "Replicating QuEra's STAR architecture paper (bicycle-chain codes, GF(2) tools)."
+requires-python = ">=3.12"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qec_star"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Slow tests (e.g. brute-force distance checks) are skipped by default.
+# Run them explicitly with:  pytest -m slow
+addopts = "-m 'not slow'"
+markers = [
+    "slow: long-running brute-force checks (run with `pytest -m slow`)",
+]
