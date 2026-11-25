@@ -7,7 +7,7 @@ name = "qec_star"
 version = "0.1.0"
 description = "Replicating QuEra's STAR architecture paper (bicycle-chain codes, GF(2) tools)."
 requires-python = ">=3.12"
-dependencies = ["numpy"]
+dependencies = ["numpy", "stim", "sinter", "ldpc"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
