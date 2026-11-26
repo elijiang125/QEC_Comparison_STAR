@@ -2,14 +2,15 @@
 
     python -m qec_star.hardware [memory] --logical-count 64
     python -m qec_star.hardware scenarios
-    python -m qec_star.hardware pilot --out results/udaya/pilot.jsonl
-    python -m qec_star.hardware figures --pilot results/udaya/pilot.jsonl --out docs/udaya/figures
+    python -m qec_star.hardware validate --out results/udaya/validation_tesseract.jsonl
+    python -m qec_star.hardware figures --out docs/udaya/figures
 """
 import argparse
 import json
 import sys
 from dataclasses import asdict
 
+from .experiments import DECODERS, SamplingPlan, run_grid, validation_cells, validation_shots
 from .models import BICYCLE_CYCLE_MS, SURFACE_CYCLE_MS, NoiseProfile
 from .resources import allocate, bicycle_block, memory_spacetime_ratio, surface_block
 from .scenarios import SCENARIOS
@@ -45,14 +46,12 @@ def main(argv=None):
     memory.add_argument("--bicycle-l", type=int, default=4)
     memory.add_argument("--p", type=float, default=0.001)
     sub.add_parser("scenarios", help="print the scenario registry as JSON")
-    pilot = sub.add_parser("pilot", help="run the pilot grid with BP+OSD (minutes to hours)")
-    pilot.add_argument("--out", required=True)
-    pilot.add_argument("--max-shots", type=int, default=40_000)
-    pilot.add_argument("--max-failures", type=int, default=100)
-    pilot.add_argument("--chunk-shots", type=int, default=100)
-    pilot.add_argument("--workers", type=int, default=8)
+    validate = sub.add_parser("validate", help="run the fixed-shot validation grid (under an hour)")
+    validate.add_argument("--out", required=True)
+    validate.add_argument("--decoder", choices=sorted(DECODERS), default="tesseract")
+    validate.add_argument("--workers", type=int, default=8)
     figures = sub.add_parser("figures", help="regenerate figures from recorded data")
-    figures.add_argument("--pilot", required=True)
+    figures.add_argument("--results", default="results/udaya")
     figures.add_argument("--out", required=True)
     args = parser.parse_args(argv)
 
@@ -60,14 +59,12 @@ def main(argv=None):
         print(json.dumps(memory_report(args), indent=2))
     elif args.command == "scenarios":
         print(json.dumps([s.to_dict() for s in SCENARIOS.values()], indent=2))
-    elif args.command == "pilot":
-        from .experiments import StopRule, pilot_cells, run_grid
-        rule = StopRule(args.max_shots, args.max_failures, args.chunk_shots, args.workers)
-        for r in run_grid(pilot_cells(), args.out, rule, progress=True):
-            pass
+    elif args.command == "validate":
+        run_grid(validation_cells(), args.out, SamplingPlan(workers=args.workers),
+                 decoder=DECODERS[args.decoder], shots_for=validation_shots, progress=True)
     else:
         from .figures import make_figures
-        for path in make_figures(args.pilot, args.out):
+        for path in make_figures(args.results, args.out):
             print(path)
 
 

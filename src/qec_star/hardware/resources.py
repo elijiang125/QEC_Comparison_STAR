@@ -8,6 +8,7 @@ Nothing here estimates a logical error rate. A resource ratio is a fair
 architecture comparison only at matched workload and reliability target.
 """
 from dataclasses import dataclass
+from math import ceil
 
 from ..codes import bicycle_chain
 from ..gf2 import css_k
@@ -169,6 +170,8 @@ def star_resources(*, q_data: float, q_magic: float, v_rz: float, v_cliff: float
     paper's bicycle convention of running two instances side by side: twice
     the atoms, the same wall-clock latency, half the time per shot.
     TMR acceptance, repeat-until-success and logical error are not computed.
+    The atom count of one instance is rounded up to a whole atom, then
+    multiplied by the number of parallel instances.
     """
     for field, value in (("q_data", q_data), ("q_magic", q_magic), ("cycle_ms", cycle_ms)):
         nonnegative(value, field)
@@ -178,6 +181,6 @@ def star_resources(*, q_data: float, q_magic: float, v_rz: float, v_cliff: float
         raise ValueError("parallel_shots must be 1 or 2")
     nonnegative(v_rz, "v_rz")
     nonnegative(v_cliff, "v_cliff")
-    return StarResources(round(2 * (q_data + q_magic) * parallel_shots),
+    return StarResources(ceil(2 * (q_data + q_magic)) * parallel_shots,
                          (v_rz/q_magic + v_cliff/q_data) * cycle_ms/1000,
                          parallel_shots)

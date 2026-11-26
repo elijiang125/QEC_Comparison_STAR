@@ -182,6 +182,13 @@ def test_two_parallel_shots_change_throughput_not_latency():
     assert two.qubit_seconds_per_shot == one.qubit_seconds_per_shot
 
 
+def test_fractional_inputs_round_up_per_instance_then_double():
+    # 2*(1.1+1.1) = 4.4 atoms -> 5 per instance; two instances are exactly twice one.
+    one = star_resources(q_data=1.1, q_magic=1.1, v_rz=1, v_cliff=1, cycle_ms=1)
+    two = star_resources(q_data=1.1, q_magic=1.1, v_rz=1, v_cliff=1, cycle_ms=1, parallel_shots=2)
+    assert (one.physical_qubits, two.physical_qubits) == (5, 10)
+
+
 def test_star_runtime_is_linear_in_cycle_time():
     args = dict(q_data=448, q_magic=504, v_rz=1e6, v_cliff=1e6)
     assert (star_resources(**args, cycle_ms=4).wall_seconds

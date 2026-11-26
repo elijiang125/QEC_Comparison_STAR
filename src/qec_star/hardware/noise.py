@@ -12,6 +12,9 @@ Convention (paper Sec. III; see docs/udaya/ASSUMPTIONS.md):
   2-qubit gate     -> DEPOLARIZE2(two_qubit) after the gate
   measurement      -> outcome flipped with probability `measurement`
   entangling layer -> DEPOLARIZE1(idle) on allocated qubits it leaves untouched
+Extension, off in the paper baseline (cycle_idle):
+  measurement layer -> DEPOLARIZE1(cycle_idle) on allocated qubits that wait
+                       through it and are used by a later entangling layer
 A "layer" (moment) is the run of instructions between two TICKs.
 Each inserted channel carries a Stim tag naming its origin (prep, one_qubit,
 two_qubit, idle, cycle_idle). Tags do not affect simulation; they make the
@@ -56,25 +59,35 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
     out = stim.Circuit()
     touched = set()                 # qubits used so far in the current moment
     kinds = set()                   # which of "pair" / "measure" the moment contains
+    # entangled_later[i]: qubits that some two-qubit gate after instruction i acts on.
+    # Mid-circuit waiting only matters for qubits that are used again, so a
+    # memory of r rounds gets cycle_idle r-1 times whatever the final readout
+    # looks like (it differs between the bicycle and Stim surface circuits).
+    entangled_later, later = [], set()
+    for op in reversed(flat):
+        entangled_later.append(set(later))
+        if op.name in _PAIR:
+            later.update(t.value for t in op.targets_copy() if t.is_qubit_target)
+    entangled_later.reverse()
 
     def error(channel, targets):
         p = getattr(profile, channel)
         if targets and p:
             out.append("DEPOLARIZE2" if channel == "two_qubit" else "DEPOLARIZE1", targets, p, tag=channel)
 
-    def finish_moment():
-        untouched = sorted(allocated - touched)
+    def finish_moment(index):
+        untouched = allocated - touched
         if "pair" in kinds:
-            error("idle", untouched)
+            error("idle", sorted(untouched))
         if "measure" in kinds:
-            error("cycle_idle", untouched)
+            error("cycle_idle", sorted(untouched & entangled_later[index]))
         touched.clear()
         kinds.clear()
 
-    for op in flat:
+    for index, op in enumerate(flat):
         name, targets, args = op.name, op.targets_copy(), op.gate_args_copy()
         if name == "TICK":
-            finish_moment()
+            finish_moment(index)
             out.append(op)
             continue
         if name in _ANNOTATIONS:
@@ -114,7 +127,7 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
             if len(qs) % 2:
                 raise ValueError("pair gate requires an even number of targets")
             error("two_qubit", qs)
-    finish_moment()
+    finish_moment(len(flat) - 1) if len(flat) else None
     return out
 
 

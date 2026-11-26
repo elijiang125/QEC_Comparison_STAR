@@ -42,9 +42,10 @@ class NoiseProfile:
     idle: charged to allocated qubits left untouched by an entangling layer.
 
     cycle_idle is NOT part of the paper's model (must be 0 to reproduce it):
-    a depolarizing probability charged once per measurement moment to every
-    allocated qubit that is not measured or reset in that moment. It stands in
-    for data qubits waiting through mid-circuit readout, and is the hook for
+    a depolarizing probability charged, once per measurement moment, to every
+    allocated qubit that is not measured or reset in that moment and is used
+    by a later entangling layer. It stands in for data qubits waiting through
+    mid-circuit readout (r-1 times in an r-round memory), and is the hook for
     duration-dependent idle error (see `dephasing_probability`).
 
     Atom loss, leakage, transport error and correlated errors are not modeled.

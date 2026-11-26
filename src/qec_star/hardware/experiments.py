@@ -1,14 +1,15 @@
 """Reproducible memory experiments under a hardware scenario.
 
-A thin, deterministic runner for *pilot-scale* decoder-backed studies: it
-samples a noisy Stim circuit with fixed seeds, decodes with BP+OSD from the
-`ldpc` package, and stores everything needed to reproduce and audit a data
-point. It is not a replacement for the simulation owner's pipeline.
+A thin, deterministic runner for small decoder-backed studies: it samples a
+noisy Stim circuit with fixed seeds, decodes, and stores everything needed to
+reproduce and audit a data point. It is not a replacement for the simulation
+owner's pipeline.
 
-Statistics: one shot yields one sample, "failed" if ANY logical observable is
-predicted wrongly. The k observables of a block are correlated, so they are
-never counted as k independent samples; per-observable counts are stored as
-descriptive data only.
+Statistics: the number of shots is fixed before sampling, so an ordinary
+binomial interval applies. One shot yields one sample, "failed" if ANY logical
+observable is predicted wrongly. The k observables of a block are correlated
+and are never counted as k independent samples; per-observable counts are
+stored as descriptive data only.
 """
 import hashlib
 import json
@@ -16,8 +17,8 @@ import platform
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import asdict, dataclass, field
-from importlib.metadata import version
+from dataclasses import asdict, dataclass
+from importlib.metadata import PackageNotFoundError, version
 from math import sqrt
 from pathlib import Path
 
@@ -28,43 +29,89 @@ from .models import NoiseProfile
 from .noise import decorate_stim_memory, noise_census
 from .scenarios import REGISTRY_VERSION, SCENARIOS
 
-# BP+OSD is what the installed `ldpc` package provides. The paper used
-# relay-BP and MLE (bicycle) and MWPF (surface). BP+OSD is measurably
-# inadequate for the bicycle-chain circuit (see `low_weight_fault_failures`
-# and docs/udaya/VALIDATION.md), so results from it are pilot data only.
-DECODER = {"name": "ldpc.BpOsdDecoder", "max_iter": 30, "bp_method": "ms",
-           "ms_scaling_factor": 0.625, "osd_method": "osd0", "osd_order": 0}
+# Decoder configurations, by name. Neither is the paper's (relay-BP and MLE for
+# the bicycle chain, MWPF for the surface code).
+#   tesseract: Google's search-based most-likely-error decoder; optional
+#              dependency (`pip install tesseract-decoder`). Passes the
+#              low-weight fault check on the bicycle circuit.
+#   bposd0:    BP + OSD-0 from `ldpc`, a project dependency. FAILS that check;
+#              kept so the failure can be reproduced. See docs/udaya/VALIDATION.md.
+DECODERS = {
+    "tesseract": {"name": "tesseract", "det_beam": 5, "pqlimit": 200_000},
+    "bposd0": {"name": "bposd0", "max_iter": 30, "bp_method": "ms", "ms_scaling_factor": 0.625,
+               "osd_method": "osd0", "osd_order": 0},
+}
 
 
-def _decoder_for(circuit, decoder: dict):
-    """(BP+OSD decoder, check matrix, observables matrix) for a noisy circuit."""
-    from ldpc.bposd_decoder import BpOsdDecoder
-    from ldpc.ckt_noise.dem_matrices import detector_error_model_to_check_matrices
-    # Hyperedges are kept whole: BP+OSD works on the full check matrix.
-    m = detector_error_model_to_check_matrices(
-        circuit.detector_error_model(decompose_errors=False), allow_undecomposed_hyperedges=True)
+def dem_logical_collisions(dem) -> int:
+    """Detector patterns that different error mechanisms map to different observables.
+
+    Decoders that merge mechanisms by detector pattern alone (`ldpc`'s matrix
+    conversion, Tesseract's `merge_errors`) keep only one logical effect per
+    pattern, which silently discards the other. Zero means merging is safe.
+    """
+    effects = {}
+    for op in dem.flattened():
+        if op.type == "error":
+            targets = op.targets_copy()
+            dets = frozenset(t.val for t in targets if t.is_relative_detector_id())
+            obs = frozenset(t.val for t in targets if t.is_logical_observable_id())
+            effects.setdefault(dets, set()).add(obs)
+    return sum(len(v) > 1 for v in effects.values())
+
+
+def predictor(circuit, decoder: dict):
+    """A function mapping one shot's detection events to predicted observable flips."""
+    dem = circuit.detector_error_model(decompose_errors=False)
+    if dem_logical_collisions(dem):
+        raise ValueError("detector error model has mechanisms with equal detectors but different "
+                         "observables; these decoders would merge them")
     options = {k: v for k, v in decoder.items() if k != "name"}
-    return (BpOsdDecoder(m.check_matrix, error_channel=list(m.priors), **options),
-            m.check_matrix, m.observables_matrix)
+    n_obs = dem.num_observables
+    if decoder["name"] == "tesseract":
+        try:
+            from tesseract_decoder import tesseract
+        except ImportError as e:
+            raise ImportError("install the optional decoder: pip install tesseract-decoder") from e
+        search = tesseract.TesseractDecoder(tesseract.TesseractConfig(dem, **options))
+        return lambda dets: np.asarray(search.decode(dets.astype(bool)), dtype=np.uint8)[:n_obs]
+    if decoder["name"] == "bposd0":
+        from ldpc.bposd_decoder import BpOsdDecoder
+        from ldpc.ckt_noise.dem_matrices import detector_error_model_to_check_matrices
+        # Hyperedges are kept whole: BP+OSD works on the full check matrix.
+        m = detector_error_model_to_check_matrices(dem, allow_undecomposed_hyperedges=True)
+        bposd = BpOsdDecoder(m.check_matrix, error_channel=list(m.priors), **options)
+        return lambda dets: np.asarray((m.observables_matrix @ bposd.decode(dets.astype(np.uint8))) % 2,
+                                       dtype=np.uint8)
+    raise ValueError(f"unknown decoder {decoder['name']!r}")
 
 
 def low_weight_fault_failures(circuit, weight: int, samples: int, *, seed: int = 0,
-                              decoder: dict = None) -> int:
+                              decoder: dict = DECODERS["tesseract"]) -> int:
     """How many random weight-`weight` fault sets the decoder gets wrong.
 
     Picks `samples` random sets of `weight` distinct error mechanisms from the
-    circuit's detector error model, decodes their syndrome, and counts wrong
-    logical predictions. For a circuit of fault distance d, a sound decoder
-    must return 0 for every weight <= (d-1)/2, so this is a deterministic
-    acceptance test for a decoder, independent of Monte Carlo statistics.
+    circuit's detector error model, decodes their combined detection events,
+    and counts wrong logical predictions. For a circuit of fault distance d, a
+    sound decoder returns 0 for every weight <= (d-1)/2. This is an acceptance
+    test for a decoder that does not depend on Monte Carlo statistics. It
+    samples fault sets, so passing it is necessary, not sufficient.
     """
-    bposd, H, L = _decoder_for(circuit, decoder or DECODER)
+    dem = circuit.detector_error_model(decompose_errors=False)
+    errors = [op.targets_copy() for op in dem.flattened() if op.type == "error"]
+    predict = predictor(circuit, decoder)
     rng = np.random.default_rng(seed)
     failures = 0
     for _ in range(samples):
-        e = np.zeros(H.shape[1], dtype=np.uint8)
-        e[rng.choice(H.shape[1], weight, replace=False)] = 1
-        failures += bool(((L @ bposd.decode(((H @ e) % 2).astype(np.uint8)) + L @ e) % 2).any())
+        dets = np.zeros(dem.num_detectors, dtype=np.uint8)
+        obs = np.zeros(dem.num_observables, dtype=np.uint8)
+        for i in rng.choice(len(errors), weight, replace=False):
+            for t in errors[i]:
+                if t.is_relative_detector_id():
+                    dets[t.val] ^= 1
+                elif t.is_logical_observable_id():
+                    obs[t.val] ^= 1
+        failures += bool((predict(dets) != obs).any())
     return failures
 
 
@@ -100,7 +147,12 @@ class Cell:
 
 
 def wilson_interval(failures: int, shots: int, z: float = 1.959963984540054):
-    """Wilson score interval for a binomial proportion (95% by default)."""
+    """Wilson score interval for a binomial proportion (95% by default).
+
+    Valid when `shots` was fixed before sampling. If sampling stopped because
+    a failure count was reached, the estimate is biased and this interval
+    under-covers; label such data accordingly.
+    """
     if shots <= 0 or not 0 <= failures <= shots:
         raise ValueError("need 0 <= failures <= shots and shots > 0")
     p = failures / shots
@@ -127,97 +179,120 @@ def _decode_chunk(circuit_text: str, decoder: dict, shots: int, seed: int):
     """Sample and decode one chunk; returns (failures, per-observable failures)."""
     import stim
     circuit = stim.Circuit(circuit_text)
-    bposd, _, L = _decoder_for(circuit, decoder)
+    predict = predictor(circuit, decoder)
     dets, obs = circuit.compile_detector_sampler(seed=seed).sample(shots, separate_observables=True)
-    wrong = np.empty_like(obs)
-    for i, syndrome in enumerate(dets):
-        wrong[i] = (L @ bposd.decode(syndrome.astype(np.uint8))) % 2 != obs[i]
+    wrong = np.array([predict(d) != o for d, o in zip(dets, obs)])
     return int(wrong.any(axis=1).sum()), wrong.sum(axis=0).tolist()
 
 
-def source_commit() -> str:
-    """Current git commit, with '-dirty' if the qec_star package has uncommitted changes."""
+def _git(*args) -> str:
+    return subprocess.run(["git", *args], cwd=Path(__file__).parent, capture_output=True,
+                          text=True, check=True).stdout.strip()
+
+
+def code_revision() -> dict:
+    """Identify the simulation code, independently of documentation commits.
+
+    source_tree is git's hash of the committed `src/qec_star` directory: it
+    changes only when the package changes, so results from different commits
+    with the same source_tree were produced by identical code. `dirty` is true
+    if the package has uncommitted changes (then source_tree does not describe
+    what ran).
+    """
     try:
-        root = Path(__file__).parent
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,
-                              text=True, check=True).stdout.strip()
-        # Only this package and the circuits it decorates decide the results.
-        dirty = subprocess.run(["git", "status", "--porcelain", "--", str(root.parent)], cwd=root,
-                               capture_output=True, text=True, check=True).stdout.strip()
-        return head + ("-dirty" if dirty else "")
+        package = Path(__file__).parent.parent
+        prefix = _git("rev-parse", "--show-prefix").removesuffix("hardware/").rstrip("/")
+        return {"commit": _git("rev-parse", "HEAD"), "source_tree": _git("rev-parse", f"HEAD:{prefix}"),
+                "dirty": bool(_git("status", "--porcelain", "--", str(package)))}
     except (OSError, subprocess.CalledProcessError):
-        return "unknown"
+        return {"commit": "unknown", "source_tree": "unknown", "dirty": None}
+
+
+def _versions() -> dict:
+    out = {"python": platform.python_version()}
+    for package in ("stim", "ldpc", "numpy", "scipy", "tesseract-decoder"):
+        try:
+            out[package] = version(package)
+        except PackageNotFoundError:
+            out[package] = None
+    return out
 
 
 @dataclass(frozen=True)
-class StopRule:
-    """Stop once `max_failures` are seen or `max_shots` are spent.
+class SamplingPlan:
+    """A fixed number of shots, split into chunks with their own seeds.
 
-    Chunks run in waves of `workers`; the rule is checked between waves, so
-    the shot count is a deterministic function of the seeds and this rule,
-    and can pass either limit by up to one wave (max_shots is rounded up to
-    whole chunks).
-    Stopping on a failure count biases the estimate slightly upward
-    (order 1/max_failures); with the default 100 this is about 1%.
+    The shot count never depends on the outcomes, and the seeds depend only
+    on `seed`, the circuit and the chunk index, so a result is reproducible
+    on any number of workers.
     """
-    max_shots: int = 100_000
-    max_failures: int = 100
-    chunk_shots: int = 1_000
+    shots: int = 20_000
+    chunk_shots: int = 100
     workers: int = 8
     seed: int = 20261125
 
+    def __post_init__(self):
+        for name in ("shots", "chunk_shots", "workers"):
+            if type(getattr(self, name)) is not int or getattr(self, name) < 1:
+                raise ValueError(f"{name} must be a positive integer")
 
-def run_cell(cell: Cell, rule: StopRule = StopRule(), *, pool=None, decoder: dict = DECODER) -> dict:
-    """Run one cell to its stopping rule and return a self-describing record."""
+    def chunk_sizes(self) -> list:
+        full, rest = divmod(self.shots, self.chunk_shots)
+        return [self.chunk_shots] * full + ([rest] if rest else [])
+
+
+def run_cell(cell: Cell, plan: SamplingPlan = SamplingPlan(), *, pool=None,
+             decoder: dict = DECODERS["tesseract"]) -> dict:
+    """Sample exactly plan.shots shots of one cell and return a self-describing record."""
     noisy = cell.noisy_circuit()
     text = str(noisy)
     digest = hashlib.sha256(text.encode()).hexdigest()
-    # Seeds depend on the circuit and chunk index only, never on scheduling.
-    seeds = np.random.SeedSequence([rule.seed, int(digest[:16], 16)])
+    sizes = plan.chunk_sizes()
+    seeds = [int(s.generate_state(1)[0])
+             for s in np.random.SeedSequence([plan.seed, int(digest[:16], 16)]).spawn(len(sizes))]
     own_pool = pool is None
-    pool = pool or ProcessPoolExecutor(rule.workers)
+    pool = pool or ProcessPoolExecutor(plan.workers)
     start = time.time()
-    chunks, shots, failures = [], 0, 0
-    per_observable = np.zeros(noisy.num_observables, dtype=np.int64)
     try:
-        while shots < rule.max_shots and failures < rule.max_failures:
-            wave = min(rule.workers, -(-(rule.max_shots - shots) // rule.chunk_shots))
-            children = [int(s.generate_state(1)[0]) for s in seeds.spawn(wave)]
-            for seed, (f, per_obs) in zip(children, pool.map(
-                    _decode_chunk, [text]*wave, [decoder]*wave, [rule.chunk_shots]*wave, children)):
-                chunks.append({"seed": seed, "shots": rule.chunk_shots, "failures": f})
-                shots += rule.chunk_shots
-                failures += f
-                per_observable += per_obs
+        results = list(pool.map(_decode_chunk, [text]*len(sizes), [decoder]*len(sizes), sizes, seeds))
     finally:
         if own_pool:
             pool.shutdown()
-    low, high = wilson_interval(failures, shots)
+    failures = sum(f for f, _ in results)
+    low, high = wilson_interval(failures, plan.shots)
     return {
         "experiment": cell.experiment, "architecture": cell.architecture, "code": list(cell.code),
         "basis": cell.basis, "rounds": cell.rounds, "scenario_id": cell.scenario_id,
         "registry_version": REGISTRY_VERSION, "noise": asdict(cell.noise),
         "noise_locations": dict(noise_census(noisy)),
         "num_detectors": noisy.num_detectors, "num_observables": noisy.num_observables,
-        "circuit_sha256": digest, "decoder": decoder, "stop_rule": asdict(rule),
-        "shots": shots, "failures": failures, "shot_failure_rate": failures / shots,
-        "wilson95": [low, high], "per_observable_failures": per_observable.tolist(),
-        "chunks": chunks, "runtime_seconds": round(time.time() - start, 3),
-        "source_commit": source_commit(),
-        "versions": {"python": platform.python_version(),
-                     **{p: version(p) for p in ("stim", "ldpc", "numpy")}},
+        "circuit_sha256": digest, "decoder": decoder, "design": "fixed_shots",
+        "sampling_plan": asdict(plan),
+        "shots": plan.shots, "failures": failures, "shot_failure_rate": failures / plan.shots,
+        "wilson95": [low, high],
+        "per_observable_failures": np.sum([per for _, per in results], axis=0).tolist(),
+        "chunks": [{"seed": seed, "shots": n, "failures": f}
+                   for seed, n, (f, _) in zip(seeds, sizes, results)],
+        "runtime_seconds": round(time.time() - start, 3),
+        "code_revision": code_revision(), "versions": _versions(),
     }
 
 
-def run_grid(cells, out_path, rule: StopRule = StopRule(), *, decoder: dict = DECODER,
-             progress: bool = False) -> list:
-    """Run cells in order, appending one JSON line per cell to out_path."""
+def run_grid(cells, out_path, plan: SamplingPlan = SamplingPlan(), *,
+             decoder: dict = DECODERS["tesseract"], shots_for=None, progress: bool = False) -> list:
+    """Run cells in order, appending one JSON line per cell to out_path.
+
+    shots_for(cell) may return a shot count for that cell (fixed in advance,
+    e.g. fewer shots for expensive circuits); otherwise plan.shots is used.
+    """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     records = []
-    with ProcessPoolExecutor(rule.workers) as pool, out_path.open("a") as fh:
+    with ProcessPoolExecutor(plan.workers) as pool, out_path.open("a") as fh:
         for cell in cells:
-            record = run_cell(cell, rule, pool=pool, decoder=decoder)
+            shots = shots_for(cell) if shots_for else plan.shots
+            cell_plan = SamplingPlan(shots, plan.chunk_shots, plan.workers, plan.seed)
+            record = run_cell(cell, cell_plan, pool=pool, decoder=decoder)
             fh.write(json.dumps(record) + "\n")
             fh.flush()
             records.append(record)
@@ -231,28 +306,25 @@ def load_records(path) -> list:
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def pilot_cells() -> list:
-    """The pilot grid (experiments E1-E5 of docs/udaya/RESEARCH.md).
+def validation_cells() -> list:
+    """A small grid that a laptop can decode soundly in under an hour.
 
-    Rounds are 3d as in the paper. The surface cells use the temporary Stim
-    reference circuit. One-factor-at-a-time and idle cells use the Z basis
-    only, to keep the pilot small.
+    E1: the paper baseline (p = 1e-3, r = 3d rounds, both bases).
+    E2: one elevated uniform noise level (p = 2e-3, Z basis).
+    Channel-by-channel sweeps (E3-E5) need far more shots than this at the
+    failure rates a sound decoder gives, and are left to the production pipeline.
     """
-    codes = [("bicycle", (3, 7), 18), ("surface_reference", (5,), 15), ("surface_reference", (7,), 21)]
-    cells = []
-    for sid in ("uniform/p0.0005", "paper/p1e-3", "uniform/p0.002"):
-        experiment = "E1" if sid.startswith("paper") else "E2"
-        for arch, code, rounds in codes + [("surface_reference", (9,), 27)]:
-            for basis in "ZX":
-                cells.append(Cell(experiment, arch, code, basis, rounds, SCENARIOS[sid].noise, sid))
-    for sid in sorted(SCENARIOS):
-        experiment = {"asym/two_qubit": "E3", "asym/measurement": "E4", "asym/idle": "E4",
-                      "lit/rb87_mixed": "E4"}.get(sid.rsplit("_x", 1)[0])
-        if experiment:
-            cells += [Cell(experiment, arch, code, "Z", rounds, SCENARIOS[sid].noise, sid)
-                      for arch, code, rounds in codes]
-    for t2 in ("1500", "150"):
-        for arch, code, rounds in codes:
-            sid = f"idle/t2_{t2}ms/{'bicycle' if arch == 'bicycle' else 'surface'}"
-            cells.append(Cell("E5", arch, code, "Z", rounds, SCENARIOS[sid].noise, sid))
+    codes = [("bicycle", (3, 7), 18), ("surface_reference", (5,), 15),
+             ("surface_reference", (7,), 21), ("surface_reference", (9,), 27)]
+    cells = [Cell("E1", arch, code, basis, rounds, SCENARIOS["paper/p1e-3"].noise, "paper/p1e-3")
+             for arch, code, rounds in codes for basis in "ZX"]
+    cells += [Cell("E2", arch, code, "Z", rounds, SCENARIOS["uniform/p0.002"].noise, "uniform/p0.002")
+              for arch, code, rounds in codes]
     return cells
+
+
+def validation_shots(cell: Cell) -> int:
+    """Shots per cell, fixed in advance from measured decoding cost (not from outcomes)."""
+    if cell.architecture != "bicycle":
+        return 40_000
+    return 6_000 if cell.noise.two_qubit <= 1e-3 else 2_400

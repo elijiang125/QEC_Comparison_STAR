@@ -37,8 +37,34 @@ def test_channels_and_idle_placement():
         TICK
         M(0.04) 0 1
         DETECTOR rec[-1]
-        DEPOLARIZE1[cycle_idle](0.06) 2
     """)
+
+
+def test_cycle_idle_only_for_qubits_that_are_entangled_again():
+    # Qubit 2 waits through two readouts of qubit 0; only the first is followed by a gate on it.
+    clean = stim.Circuit("R 0 1 2\nTICK\nM 0\nTICK\nCX 1 2\nTICK\nM 0\nTICK\nM 1 2")
+    noisy = decorate_stim_memory(clean, NoiseProfile(0, 0, 0, 0, 0, "x", 0.06))
+    assert noisy == stim.Circuit("""
+        R 0 1 2
+        TICK
+        M 0
+        DEPOLARIZE1[cycle_idle](0.06) 1 2
+        TICK
+        CX 1 2
+        TICK
+        M 0
+        TICK
+        M 1 2
+    """)
+
+
+@pytest.mark.parametrize("rounds", [1, 2, 7])
+def test_cycle_idle_is_charged_rounds_minus_one_times_on_both_architectures(rounds):
+    only_idle = NoiseProfile(0, 0, 0, 0, 0, "x", 0.1)
+    bicycle = noise_census(decorate_stim_memory(memory_experiment(3, 7, rounds), only_idle))
+    surf = noise_census(decorate_stim_memory(surface(3, rounds), only_idle))
+    assert bicycle["cycle_idle"] == (rounds - 1) * 42           # 42 data qubits
+    assert surf["cycle_idle"] == (rounds - 1) * 9               # 9 data qubits
 
 
 def test_idle_is_charged_only_in_entangling_layers():
@@ -162,7 +188,7 @@ def test_bicycle_noise_location_counts(l, rounds):
         "prep": n + rounds * n,                      # data once, ancillas every round
         "two_qubit": rounds * 8 * n,
         "measurement": rounds * n + n,               # ancillas every round, data at the end
-        "cycle_idle": rounds * n + n,                # data wait each round; ancillas at final readout
+        "cycle_idle": (rounds - 1) * n,              # data wait between rounds
     }
     assert census["idle"] == 0 and census["one_qubit"] == 0
 
@@ -179,7 +205,7 @@ def test_surface_noise_location_counts(d, rounds):
         "two_qubit": rounds * cx,
         "idle": rounds * (4 * (data + anc) - 2 * cx),
         "measurement": rounds * anc + data,
-        "cycle_idle": (rounds - 1) * data,           # final data readout shares the last moment
+        "cycle_idle": (rounds - 1) * data,           # data wait between rounds
     }
 
 
