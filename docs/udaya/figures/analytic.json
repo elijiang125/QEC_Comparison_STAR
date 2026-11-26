@@ -525,7 +525,7 @@
   "surface d=9": {
    "locations_per_round": {
     "prep": 80,
-    "one_qubit": 80,
+    "one_qubit": 0,
     "two_qubit": 288,
     "measurement": 80,
     "idle": 68,
@@ -535,13 +535,13 @@
    "cycle_ms": 1.0,
    "per_logical_per_round": {
     "prep": 80.0,
-    "one_qubit": 80.0,
+    "one_qubit": 0.0,
     "two_qubit": 288.0,
     "measurement": 80.0,
     "idle": 68.0,
     "cycle_idle": 81.0
    },
-   "expected_faults_per_logical_round_at_paper_noise": 0.5960000000000001
+   "expected_faults_per_logical_round_at_paper_noise": 0.516
   },
   "bicycle [[56,8,6]]": {
    "locations_per_round": {
@@ -563,19 +563,40 @@
     "cycle_idle": 7.0
    },
    "expected_faults_per_logical_round_at_paper_noise": 0.07
+  },
+  "surface d=9, Stim reference": {
+   "locations_per_round": {
+    "prep": 80,
+    "one_qubit": 80,
+    "two_qubit": 288,
+    "measurement": 80,
+    "idle": 68,
+    "cycle_idle": 81
+   },
+   "logical": 1,
+   "cycle_ms": 1.0,
+   "per_logical_per_round": {
+    "prep": 80.0,
+    "one_qubit": 80.0,
+    "two_qubit": 288.0,
+    "measurement": 80.0,
+    "idle": 68.0,
+    "cycle_idle": 81.0
+   },
+   "expected_faults_per_logical_round_at_paper_noise": 0.5960000000000001
   }
  },
  "relative_expected_faults": {
   "surface d=9": {
-   "asym/two_qubit_x2": 1.483221476510067,
-   "asym/two_qubit_x4": 2.4496644295302015,
-   "asym/measurement_x2": 1.134228187919463,
-   "asym/measurement_x4": 1.4026845637583891,
-   "asym/idle_x2": 1.1140939597315436,
-   "asym/idle_x4": 1.3422818791946307,
-   "lit/rb87_mixed": 1.4590604026845635,
-   "idle/t2_1500ms": 1.0452869161068226,
-   "idle/t2_150ms": 1.4515134172333979
+   "asym/two_qubit_x2": 1.558139534883721,
+   "asym/two_qubit_x4": 2.674418604651163,
+   "asym/measurement_x2": 1.1550387596899225,
+   "asym/measurement_x4": 1.4651162790697674,
+   "asym/idle_x2": 1.1317829457364341,
+   "asym/idle_x4": 1.3953488372093024,
+   "lit/rb87_mixed": 1.6155038759689921,
+   "idle/t2_1500ms": 1.0523081434102057,
+   "idle/t2_150ms": 1.5215154974246228
   },
   "bicycle [[56,8,6]]": {
    "asym/two_qubit_x2": 1.7999999999999998,
@@ -587,6 +608,17 @@
    "lit/rb87_mixed": 1.7599999999999998,
    "idle/t2_1500ms": 1.066622241968728,
    "idle/t2_150ms": 1.6622419096402155
+  },
+  "surface d=9, Stim reference": {
+   "asym/two_qubit_x2": 1.483221476510067,
+   "asym/two_qubit_x4": 2.4496644295302015,
+   "asym/measurement_x2": 1.134228187919463,
+   "asym/measurement_x4": 1.4026845637583891,
+   "asym/idle_x2": 1.1140939597315436,
+   "asym/idle_x4": 1.3422818791946307,
+   "lit/rb87_mixed": 1.4590604026845635,
+   "idle/t2_1500ms": 1.0452869161068226,
+   "idle/t2_150ms": 1.4515134172333979
   }
  },
  "cycle_ratio_vs_fixed_overhead_us": {

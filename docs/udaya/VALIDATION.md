@@ -5,8 +5,10 @@ environment installed with `python -m pip install -e '.[dev]'` (Python 3.12, Sti
 
 ## Test suite
 
-`python -m pytest -q` runs 207 tests: the 62 that were on `epa-branch` (unchanged; one more is
-marked slow and deselected by the project's settings) and 145 for this workstream. All pass. Nothing is skipped for a missing dependency; the two tests that use the
+`python -m pytest -q` runs 311 tests: the 62 that were on `epa-branch` (unchanged; one more is
+marked slow and deselected by the project's settings), the 36 that came with the surface-code
+baseline (unchanged), and 213 for this workstream. All pass, and so does the slow test
+(`python -m pytest -q -m slow`). None is skipped. Nothing is skipped for a missing dependency; the two tests that use the
 optional Tesseract decoder need `pip install tesseract-decoder`.
 
 | File | What it establishes |
@@ -14,6 +16,7 @@ optional Tesseract decoder need `pip install tesseract-decoder`.
 | `tests/test_udaya_noise.py` | channel placement on hand-written circuits; exact noise-location counts on both real circuits; zero-noise identity; record, detector and observable preservation in X and Z bases; exact unrolling of repeat blocks; the per-round idle rule; explicit rejection of noisy, unsupported or ambiguous input; two sampled rates against closed-form values |
 | `tests/test_udaya_hardware.py` | probability and timing validation; fidelity conversion; cycle formula by hand; block footprints against the paper's Table 4; whole-block rounding; break-even ratio; Eqs. (32)-(33) by hand; rounding of fractional inputs; latency versus throughput; the CLI |
 | `tests/test_udaya_scenarios.py` | the reference scenario equals the paper's values and cannot be mutated; every scenario labels every parameter; one-factor scenarios change exactly one channel |
+| `tests/test_udaya_surface.py` | the team's surface circuit at d = 3, 5, 7, 9 in both bases: structure (atoms, detectors, observables, 4 CNOT layers, no one-qubit gates); hand-derived noise-location counts; idle noise on exactly the untouched atoms; record preservation; full distance under the complete noise model; the expected differences from Stim's circuit; every registry scenario; both decoders |
 | `tests/test_udaya_experiments.py` | Wilson interval against known values; exact fixed shot counts; determinism under fixed seeds and any worker count; disjoint seeds for different circuits; provenance fields; refusal to append to an existing result file; refusal of detector error models with merged logical effects; the low-weight fault check; **every committed validation record regenerates to the same circuit hash and seeds** |
 
 Expected values in these tests come from hand derivations written next to the assertion, not from
@@ -28,7 +31,8 @@ Noise locations in a full memory experiment, derived by hand and asserted in the
 | Circuit | prep | one-qubit | two-qubit | idle | measurement |
 |---|---|---|---|---|---|
 | bicycle [[42,6,6]], 18 rounds | 42 + 18·42 = 798 | 0 | 18·8·42 = 6,048 | 0 | 18·42 + 42 = 798 |
-| surface d = 9, 27 rounds (Stim) | 161 + 27·80 = 2,321 | 27·80 = 2,160 | 27·288 = 7,776 | 27·68 = 1,836 | 27·80 + 81 = 2,241 |
+| surface d = 9, 27 rounds (team circuit) | 81 + 27·80 = 2,241 | 0 | 27·288 = 7,776 | 27·68 = 1,836 | 27·80 + 81 = 2,241 |
+| surface d = 9, 27 rounds (Stim reference) | 161 + 27·80 = 2,321 | 27·80 = 2,160 | 27·288 = 7,776 | 27·68 = 1,836 | 27·80 + 81 = 2,241 |
 
 The surface CNOT count per round is the sum of check weights: 64 weight-4 checks and 16 weight-2
 checks give 288. Idle locations are 4 layers × 161 atoms − 2 × 288 = 68.
@@ -37,6 +41,38 @@ checks give 288. Idle locations are 4 layers × 161 atoms − 2 × 288 = 68.
 CNOT layers of Table 2 acts on all four atom arrays, so no atom is ever idle during an entangling
 layer. The `asym/idle_*` scenarios therefore produce a bicycle circuit identical to the baseline
 (same SHA-256), while the surface circuit has 68 idle locations per round.
+
+## Surface-code integration
+
+The surface-code baseline was merged from `origin/harman` at `f377d22` (merge commit `07e0412`); its
+two commits, authorship and files are unchanged. It and the hardware workstream share no file.
+
+Independent checks at d = 3, 5, 7 and 9, in both bases (`tests/test_udaya_surface.py`):
+
+| Property | Expected (by hand) | Result |
+|---|---|---|
+| Atoms | 2d² − 1, indices dense | 17, 49, 97, 161 |
+| Logical observables | 1 | 1 |
+| Detectors for r rounds | r (d² − 1) | matches; equal to Stim's count |
+| CNOT layers per round | 4 | 4 |
+| CNOTs per round | 4(d−1)² + 4(d−1) | 24, 80, 168, 288 |
+| One-qubit gates | none (direct `RX` / `MX`) | none |
+| Idle locations per round | 4(2d² − 1) − 2 × CNOTs | 20, 36, 52, 68 |
+| Preparation locations, r rounds | d² + r (d² − 1) | matches |
+| Measurement locations, r rounds | r (d² − 1) + d² | matches |
+| Per-round idle extension | (r − 1) d² | matches |
+| Noiseless circuit after decoration | identical to the input; no detector fires | yes |
+| Stripping the noise | returns the input circuit | yes |
+| Merged logical effects in the error model | 0 | 0 |
+| Shortest undetectable graph-like error under the full noise model | d | 3, 5, 7, 9 |
+| Tesseract and BP+OSD accept the circuit | | yes; Tesseract mis-corrected none of 40 sampled single faults per distance |
+| All 23 registry scenarios apply | | yes |
+
+Against Stim's generated circuit for the same code: equal two-qubit, idle, measurement and per-round
+idle counts; Stim has r (d² − 1) more one-qubit locations (a Hadamard before and after the CNOTs on
+each X ancilla) and d² − 1 more preparation locations (it resets the ancillas once more at the start).
+
+The surface-code owner's own tests cover d = 3, 5, 7. Distance 9 is covered by ours.
 
 ## Circuit-level distance of the team's schedule
 
@@ -124,17 +160,21 @@ for name in ("tesseract", "bposd0"):
 
 Every record stores the noisy circuit's SHA-256, the decoder settings, the sampling plan, each
 chunk's seed and failure count, package versions, and `code_revision`: the commit, a dirty flag for
-the package, and `source_tree`, git's hash of the committed `src/qec_star` directory. The validation
-records were produced at commit `0f4322f` with `source_tree` `f351cc7` and a clean package.
+the package, and `source_tree`, git's hash of the committed `src/qec_star` directory. The first
+validation records were produced at commit `0f4322f` with `source_tree` `f351cc7` and a clean
+package; the surface-integration records at commit `8dd53a5` with `source_tree` `47d0bb4`, clean,
+and with `loaded_source_sha256` recorded.
 
 Later commits do change the package (figure labels, input validation, stricter rejection of
 ambiguous circuits, a hash of the loaded source in new records); `git diff 0f4322f -- src` shows
-exactly what. They do not change any recorded circuit: a test rebuilds all 12 validation circuits
-with the current code and checks their SHA-256 and seeds against the records.
+exactly what. They do not change any recorded circuit: a test rebuilds all 12 circuits of the first
+validation file with the current code and checks their SHA-256 and seeds against the records. That
+includes the Stim reference circuits, which are now obtained through the surface module.
 
 Limits of this scheme: git describes committed files, not what Python loaded. Records made from now
 on also store `loaded_source_sha256`, a hash of the package files at import, and take the revision
-before sampling starts. The 31 existing records predate this and rely on the clean-package flag.
+before sampling starts. The 31 records of the first two files predate this and rely on the
+clean-package flag.
 `run_grid` refuses to write into a non-empty file, because rerunning with the same seeds would
 duplicate trials.
 

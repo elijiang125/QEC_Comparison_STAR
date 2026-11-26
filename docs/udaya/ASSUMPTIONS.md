@@ -52,7 +52,7 @@ effective flip rate is 2p/3 (checked by sampling in `tests/test_udaya_noise.py`)
 | Quantity | Value | Formula / check |
 |---|---|---|
 | Per-layer budget implied by the paper | 0.25 ms | 1.0/4 = 1.5/6 = 2.0/8. The paper's cycle time is exactly proportional to stabilizer weight, with no fixed term |
-| Noise locations per round, surface d=9 | 288 two-qubit, 80 prep, 80 measurement, 80 one-qubit, 68 idle = 596 | exact count on Stim's rotated memory circuit; hand count in the tests |
+| Noise locations per round, surface d=9 | 288 two-qubit, 80 prep, 80 measurement, 68 idle = 516 | exact count on the team's surface circuit; hand count in the tests. Stim's generated circuit adds 80 one-qubit locations (596) |
 | Noise locations per round, bicycle [[56,8,6]] | 448 two-qubit, 56 prep, 56 measurement, 0 idle = 560 | exact count on the team's circuit |
 | Idle locations in the bicycle circuit | 0 | each of the 8 CNOT layers uses all 4lm atoms |
 | Memory qubit ratio, 64 logical | 10,304 / 896 = 11.5 | exact block counting, d=9 vs [[56,8,6]] |
@@ -105,8 +105,11 @@ scenarios` prints every scenario with its per-parameter evidence class.
   depolarizing channel of the same total probability. Its Z component is p/3; the errors that act as
   phase flips (Z or Y) total 2p/3, one third less than p; and it adds bit-flip errors (X or Y, 2p/3)
   that pure dephasing would not cause.
-- **Surface reference circuit**: Stim's generated rotated memory circuit prepares and measures X
-  ancillas with H gates, which adds 80 one-qubit noise locations per round at d = 9. A circuit that
-  prepares \|+> directly, as the paper describes, would not have them.
+- **Surface circuit**: results use the team's circuit (`qec_star.surface`), which prepares and
+  measures X ancillas directly, as the paper describes. Stim's generated circuit, the stand-in used
+  before, does it with H gates and so has 80 more noise locations per round at d = 9. It is kept as
+  the `surface_reference` architecture for comparison and to keep earlier records reproducible.
+- **One-qubit error**: neither team circuit contains a one-qubit gate, so `one_qubit` affects no
+  current result. It will matter once transversal gates are simulated.
 - **Atom counts in Eq. (32)**: the paper's 2 (Q_data + Q_magic) need not be an integer. We round one
   instance up to a whole atom and then multiply by the number of parallel instances.

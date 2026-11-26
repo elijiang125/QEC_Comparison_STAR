@@ -2,9 +2,10 @@
 
 Figures 1-4 are analytic: exact counting and the timing model, with every
 plotted number also written to `analytic.json`. They do not depend on any
-decoder. Figure 5 is drawn from the sampled records under results/ and is
-labeled provisional, because it depends on the decoder and on a stand-in
-surface-code circuit.
+decoder, and use the team's surface-code circuit. Figures 5 and 6 are drawn
+from the sampled records under results/ and are labeled provisional because
+they depend on the decoder. Figure 5 is historical: it compares two decoders
+on the Stim reference circuit that preceded the team's.
 """
 import json
 from pathlib import Path
@@ -19,15 +20,17 @@ INK, MUTED, GRID = "#191919", "#666666", "#e6e6e6"
 BLUE, ORANGE, AQUA, YELLOW, MAGENTA, VIOLET = "#257de0", "#f47230", "#00b894", "#f2a600", "#ee7fac", "#6a4ce2"
 CHANNEL_COLOURS = {"two_qubit": BLUE, "measurement": ORANGE, "prep": AQUA,
                    "one_qubit": YELLOW, "idle": MAGENTA}
-ARCHITECTURES = {"surface d=9": ("surface_reference", (9,), "surface", BLUE),
+ARCHITECTURES = {"surface d=9": ("surface", (9,), "surface", BLUE),
                  "bicycle [[56,8,6]]": ("bicycle", (4, 7), "bicycle", ORANGE)}
+# Shown next to the team circuit in figure 2 only, to document what changed.
+STIM_REFERENCE = {"surface d=9, Stim reference": ("surface_reference", (9,), "surface", MUTED)}
 EXPOSURE_SCENARIOS = ["asym/two_qubit_x2", "asym/two_qubit_x4", "asym/measurement_x2",
                       "asym/measurement_x4", "asym/idle_x2", "asym/idle_x4", "lit/rb87_mixed",
                       "idle/t2_1500ms", "idle/t2_150ms"]
 SAMPLED_CODES = {("bicycle", (3, 7)): "bicycle [[42,6,6]]",
-                 ("surface_reference", (5,)): "surface d=5",
-                 ("surface_reference", (7,)): "surface d=7",
-                 ("surface_reference", (9,)): "surface d=9"}
+                 ("surface_reference", (5,)): "Stim surface d=5",
+                 ("surface_reference", (7,)): "Stim surface d=7",
+                 ("surface_reference", (9,)): "Stim surface d=9"}
 
 
 def _axes(ax, xlabel, ylabel, title):
@@ -57,10 +60,11 @@ def expected_faults_per_logical_round(locations: dict, noise: NoiseProfile, logi
 def analytic_tables() -> dict:
     """Every number behind figures 1-4."""
     surface, b6, b8 = surface_block(9), bicycle_block(3), bicycle_block(4)
-    blocks = {"surface d=9": surface, "bicycle [[56,8,6]]": b8}
+    blocks = {"surface d=9": surface, "surface d=9, Stim reference": surface, "bicycle [[56,8,6]]": b8}
     counts = list(range(1, 129))
-    budget, exposure = {}, {label: {} for label in ARCHITECTURES}
-    for label, (arch, code, family, _) in ARCHITECTURES.items():
+    both = {**ARCHITECTURES, **STIM_REFERENCE}
+    budget, exposure = {}, {label: {} for label in both}
+    for label, (arch, code, family, _) in both.items():
         locations = per_round_locations(arch, code)
         k = blocks[label].logical
         base = expected_faults_per_logical_round(locations, SCENARIOS["paper/p1e-3"].noise, k)
@@ -99,8 +103,8 @@ def _fig_memory(plt, t, out):
 
 
 def _fig_budget(plt, t, out):
-    fig, ax = plt.subplots(figsize=(7, 3.2))
-    labels = list(t["fault_budget"])
+    fig, ax = plt.subplots(figsize=(7.6, 3.6))
+    labels = ["bicycle [[56,8,6]]", "surface d=9", "surface d=9, Stim reference"]
     left = [0.0] * len(labels)
     for channel, colour in CHANNEL_COLOURS.items():
         values = [t["fault_budget"][l]["per_logical_per_round"][channel] for l in labels]
@@ -110,7 +114,8 @@ def _fig_budget(plt, t, out):
     for y, total in enumerate(left):
         ax.text(total + 8, y, f"{total:g}", va="center", color=INK, fontsize=9)
     _axes(ax, "noise locations per logical qubit per syndrome round", "",
-          "Where faults can occur under the paper's noise model (exact count)")
+          "Noise locations under the paper's model (exact count)\n"
+          "surface d=9: team circuit. Stim reference: adds Hadamards")
     ax.set_xlim(0, max(left) * 1.12)
     ax.legend(frameon=False, ncols=5, loc="upper center", bbox_to_anchor=(0.5, -0.32), labelcolor=INK,
               fontsize=8)
@@ -185,12 +190,48 @@ def _fig_decoders(plt, results_dir, out):
                                linewidths=2)
             ax.plot([], [], color=colour, marker=marker, linestyle="none", label=label)
         ax.set_yscale("log")
-        ax.set_xticks(range(len(SAMPLED_CODES)), list(SAMPLED_CODES.values()), fontsize=8)
+        ax.set_xticks(range(len(SAMPLED_CODES)), list(SAMPLED_CODES.values()), fontsize=7)
         _axes(ax, "", "failure probability per shot (3d rounds)" if p == 1e-3 else "", f"Z-basis memory, {title}")
     axes[1].legend(frameon=False, labelcolor=INK, fontsize=8)
-    fig.suptitle("PROVISIONAL. Not the paper's decoders; surface circuits are Stim stand-ins. 95% Wilson intervals; "
-                 "hollow triangles are upper bounds with zero failures.", fontsize=8, color=MUTED, x=0.01, ha="left")
+    fig.suptitle("PROVISIONAL, historical. Not the paper's decoders; surface circuits here are the Stim reference. "
+                 "95% Wilson intervals; hollow triangles are upper bounds with zero failures.",
+                 fontsize=8, color=MUTED, x=0.01, ha="left")
     return _save(fig, out / "fig5_provisional_decoder_comparison.png") if drawn else None
+
+
+def _fig_surface_circuits(plt, results_dir, out):
+    """Provisional: the team's surface circuit against the Stim reference, same decoder."""
+    records = []
+    for name in ("validation_tesseract.jsonl", "validation_surface_team_tesseract.jsonl"):
+        path = Path(results_dir) / name
+        records += load_records(path) if path.exists() else []
+    series = {"team circuit (direct X-basis reset and readout)": ("surface", BLUE, "o"),
+              "Stim reference (Hadamard gates)": ("surface_reference", MUTED, "s")}
+    panels = (("paper/p1e-3", "Z", "p = 1e-3, Z basis"), ("paper/p1e-3", "X", "p = 1e-3, X basis"),
+              ("uniform/p0.002", "Z", "p = 2e-3, Z basis"))
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3.9), sharey=True)
+    drawn = False
+    for ax, (sid, basis, title) in zip(axes, panels):
+        for offset, (label, (arch, colour, marker)) in zip((-0.12, 0.12), series.items()):
+            for r in records:
+                if (r["architecture"], r["scenario_id"], r["basis"]) != (arch, sid, basis):
+                    continue
+                drawn = True
+                x, (low, high) = (r["code"][0] - 3) / 2 + offset, r["wilson95"]
+                if r["failures"]:
+                    ax.errorbar([x], [r["shot_failure_rate"]],
+                                yerr=[[r["shot_failure_rate"] - low], [high - r["shot_failure_rate"]]],
+                                color=colour, marker=marker, markersize=7, capsize=3, linewidth=2)
+                else:
+                    ax.scatter([x], [high], marker="v", s=60, facecolors="none", edgecolors=colour, linewidths=2)
+            ax.plot([], [], color=colour, marker=marker, linestyle="none", label=label)
+        ax.set_yscale("log")
+        ax.set_xticks(range(4), ["d=3", "d=5", "d=7", "d=9"])
+        _axes(ax, "surface-code distance", "failure probability per shot (3d rounds)" if ax is axes[0] else "", title)
+    axes[0].legend(frameon=False, labelcolor=INK, fontsize=8, loc="lower left")
+    fig.suptitle("PROVISIONAL. Tesseract decoder (beam 5), fixed shots, 95% Wilson intervals; hollow triangles are "
+                 "upper bounds with zero failures.", fontsize=8, color=MUTED, x=0.01, ha="left")
+    return _save(fig, out / "fig6_provisional_surface_circuits.png") if drawn else None
 
 
 def _save(fig, path):
@@ -210,6 +251,6 @@ def make_figures(results_dir, out_dir) -> list:
     (out / "analytic.json").write_text(json.dumps(tables, indent=1) + "\n")
     paths = [out / "analytic.json", _fig_memory(plt, tables, out), _fig_budget(plt, tables, out),
              _fig_timing(plt, tables, out), _fig_exposure(plt, tables, out),
-             _fig_decoders(plt, results_dir, out)]
+             _fig_decoders(plt, results_dir, out), _fig_surface_circuits(plt, results_dir, out)]
     plt.close("all")
     return [p for p in paths if p]

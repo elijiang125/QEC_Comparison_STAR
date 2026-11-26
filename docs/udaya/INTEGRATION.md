@@ -38,14 +38,26 @@ Guarantees, all covered by tests:
 `REPEAT` blocks are accepted and unrolled. Qubits that no instruction touches are not charged idle
 noise; pass `active_qubits=` to add spectator atoms explicitly.
 
-The team's `memory_experiment` and Stim's generated surface-code circuits both satisfy this as they are.
+The team's bicycle-chain `circuits.memory_experiment`, the team's `surface.memory_experiment` and
+Stim's generated surface-code circuits all satisfy this as they are.
+
+For the surface code:
+
+```python
+from qec_star import surface
+clean = surface.memory_experiment(9, rounds=27, basis="X")
+noisy = decorate_stim_memory(clean, SCENARIOS["asym/two_qubit_x2"].noise)
+```
+
+In `experiments.Cell`, the architecture names are `"bicycle"` (code `(l, m)`), `"surface"` (the
+team circuit, code `(d,)`) and `"surface_reference"` (Stim's circuit, code `(d,)`).
 
 ## Dependencies on teammates
 
 | I need | From | Status | Used for |
 |---|---|---|---|
 | Noiseless bicycle-chain memory circuit | QEC owner | available (`circuits.py`) | all bicycle results |
-| Noiseless surface-code memory circuit with the same conventions | surface-code owner | **missing**; Stim's generated circuit is a labeled stand-in (`surface_reference`) | all surface results |
+| Noiseless surface-code memory circuit with the same conventions | surface-code owner | available (`surface.py`, merged from `origin/harman` at `f377d22`); verified at d = 3, 5, 7, 9 in both bases | all surface results |
 | A decoder for the bicycle circuit that is accurate at production speed | simulation owner | **partly**: Tesseract works but costs 1 to 5 worker-seconds per shot at 18 rounds; BP+OSD-0 from `ldpc` is about 100 times worse (see VALIDATION.md) | any logical error rate worth quoting |
 | Transversal-gate and magic-state circuits | QEC | missing | noise beyond memory |
 | Logical qubit count, V_RZ, V_Cliff, factory count and size, error budget | Hamiltonian / algorithm owner | missing | end-to-end resources with Eqs. (32)-(33) |
@@ -79,6 +91,6 @@ only: the observables of one block are correlated and are not independent sample
 ## Open questions for the team
 
 1. Which branch is the integration target? `udaya` is based on `epa-branch` at `0dc22d9`.
-2. Will the surface-code circuit prepare and measure X ancillas directly (`RX`/`MX`) or through H gates? This changes its noise count by 80 locations per round at d = 9.
+2. Answered: the surface-code circuit prepares and measures X ancillas directly (`RX`/`MX`), so it has 516 noise locations per round at d = 9, not the 596 of the Stim stand-in.
 3. Which decoder will the simulation pipeline use for the bicycle code (relay-BP, Tesseract, BP+OSD with stronger settings, an MLE solver)?
 4. Should the comparison keep the paper's pairing (surface d = 9 against bicycle d = 6), or match logical error rates first?

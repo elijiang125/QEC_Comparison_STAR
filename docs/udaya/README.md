@@ -1,6 +1,7 @@
 # Hardware and noise modeling workstream (Udaya)
 
-Branch `udaya`, based on `epa-branch` at `0dc22d9`. Primary paper:
+Branch `udaya`, based on `epa-branch` at `0dc22d9`, with the surface-code baseline merged from
+`origin/harman` at `f377d22`. Primary paper:
 [Ismail et al., arXiv:2606.25011v1](https://arxiv.org/html/2606.25011v1).
 
 **Question.** Does the bicycle-chain qLDPC STAR architecture keep its space-time advantage over
@@ -16,8 +17,9 @@ logical error rates are not reproduced. Details are in [RESULTS.md](RESULTS.md) 
 ## Scope
 
 This workstream owns hardware assumptions, noise channels, cycle-time and atom accounting, and the
-hardware sensitivity analysis. It consumes the QEC team's circuits and does not build parity-check
-matrices, syndrome schedules, decoders, the Hamiltonian compilation, or the non-Clifford simulation.
+hardware sensitivity analysis. It consumes the QEC team's bicycle-chain circuit and the surface-code
+owner's surface circuit, and does not build parity-check matrices, syndrome schedules, decoders,
+the production simulations, the Hamiltonian compilation, or the non-Clifford simulation.
 
 ## Quick start
 
@@ -25,14 +27,14 @@ matrices, syndrome schedules, decoders, the Hamiltonian compilation, or the non-
 python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install -e '.[dev]'
 python -m pip install tesseract-decoder               # optional decoder (2 tests and `validate` need it)
-python -m pytest -q                                   # 207 tests
+python -m pytest -q                                   # 311 tests (add -m slow for one more)
 python -m qec_star.hardware --logical-count 64        # memory footprint of both architectures
 python -m qec_star.hardware scenarios                 # the scenario registry, as JSON
 python -m qec_star.hardware figures --out docs/udaya/figures
-python -m qec_star.hardware validate --out results/udaya/validation_tesseract.jsonl --workers 12
+python -m qec_star.hardware validate --grid surface --out NEW_FILE.jsonl --workers 12
 ```
 
-`validate` takes about 50 minutes on 12 cores and needs a new output file (it refuses to add to
+`validate` takes about an hour on 12 cores and needs a new output file (it refuses to add to
 existing results). The other commands
 take seconds. The notebook `docs/udaya/hardware_models.ipynb` walks through the models with
 editable parameters; it needs `jupyter`.
@@ -47,9 +49,10 @@ editable parameters; it needs `jupyter`.
 | `src/qec_star/hardware/resources.py` | exact block accounting; the paper's Eqs. (32)-(33) |
 | `src/qec_star/hardware/experiments.py` | fixed-shot runner, statistics, provenance, low-weight fault check |
 | `src/qec_star/hardware/figures.py` | figures from recorded data |
-| `tests/test_udaya_*.py` | 145 tests |
+| `tests/test_udaya_*.py` | 213 tests, 68 of them on the team's surface circuit |
+| `src/qec_star/surface.py`, `tests/test_surface.py` | the surface-code owner's baseline, unchanged |
 | `results/udaya/` | raw sampling records and a README describing them |
-| `docs/udaya/figures/` | five figures and `analytic.json` |
+| `docs/udaya/figures/` | six figures and `analytic.json` |
 | `docs/udaya/hardware_models.ipynb` | executed demonstration notebook |
 
 ## Documents

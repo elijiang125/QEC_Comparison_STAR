@@ -1,6 +1,6 @@
 # Roadmap and status
 
-Target: about one-fifth of a five-person project. Status as of 25 November 2026. A milestone is
+Target: about one-fifth of a five-person project. Status as of 26 November 2026. A milestone is
 marked done only if its artifacts are committed on `udaya`.
 
 ## Milestones
@@ -15,6 +15,7 @@ marked done only if its artifacts are committed on `udaya`.
 | 6 | Sensitivity analysis | **partly** | (a) fault budget per scenario, exact; (b) decoder-backed logical error per scenario with ≥ 100 failures or a stated bound | (a) done: RESULTS.md A2, A4. (b) **not done**: only the baseline and one elevated-noise point were sampled, giving bounds |
 | 7 | Figures | done for the analytic set | regenerated from recorded data by one command | `docs/udaya/figures/` (4 analytic, 1 provisional) |
 | 8 | Documentation, notebook, handoff | done | documents match the committed code and data; anything measured ad hoc is labeled unrecorded | `docs/udaya/`; second review in VALIDATION.md |
+| 8b | Team surface-code circuit integrated | done | merged with authorship; counts verified by hand at d = 3, 5, 7, 9 in both bases; analytic results and figures regenerated; fixed-shot comparison with the Stim reference | merge `07e0412`; `tests/test_udaya_surface.py`; RESULTS.md B2 |
 | 9 | Reproduction of the paper's logical error rates | **not done** | failure rates with intervals that resolve the paper's values, with its decoders or equivalent | needs cluster-scale sampling |
 | 10 | End-to-end resource comparison | **not done** | paper's 1,904 to 3,584 atom range reproduced or the gap explained | needs algorithm volumes |
 | 11 | Atom loss (optional) | not started | loss-aware circuit semantics and a decoder validated on a toy case | |
@@ -25,8 +26,7 @@ marked done only if its artifacts are committed on `udaya`.
    ≥ 100 failures per cell, then the one-channel, idle and literature-anchored scenarios. *Done
    when:* each cell has ≥ 100 failures or a stated bound from a fixed shot count, the decoder has
    been compared with Tesseract on the low-weight fault check, and its low-confidence events are recorded.
-2. **The team's surface-code circuit** (surface-code owner) in place of Stim's generated one. *Done when:* the
-   noise-location test is updated to its structure and the baseline is rerun.
+2. *(done)* The team's surface-code circuit now replaces Stim's generated one.
 3. **Matched-reliability comparison.** Choose the surface distance whose logical error matches the
    bicycle code's, then compare space-time cost. *Done when:* both error rates are quoted with intervals.
 4. **End-to-end resources** from Eqs. (32)-(33) with the algorithm owner's volumes and factory
@@ -36,7 +36,8 @@ marked done only if its artifacts are committed on `udaya`.
    *Done when:* each duration has an entry in ASSUMPTIONS.md.
 6. **Biased and loss noise** (optional). Z-biased idle and CZ channels; heralded loss.
 
-Items 1 to 4 depend on teammates (HANDOFF.md). Items 5 and 6 I can do alone; 5 needs a trap layout
+Items 1, 3 and 4 depend on teammates (HANDOFF.md). The surface-code owner has taken the surface
+stack and the simulations, so item 1 is theirs to run with the configurations provided here. Items 5 and 6 I can do alone; 5 needs a trap layout
 to be agreed.
 
 ## Known limitations
@@ -44,7 +45,6 @@ to be agreed.
 - Memory experiments only. No transversal gates, no magic-state preparation, no rotations.
 - Pauli noise only. No loss, leakage, crosstalk or coherent error.
 - Sampled results are bounds from a few thousand shots with a decoder that is not the paper's.
-- The surface results use Stim's circuit, which has H gates that a direct \|+> preparation would not.
 - Cycle times are the paper's assumptions; measured rounds are currently about 4.5 times longer.
 - The architectures are compared at the paper's code distances, not at equal logical error.
 

@@ -4,7 +4,7 @@ What each teammate can use from the hardware workstream today, and what the hard
 needs from them. Interfaces are specified in [INTEGRATION.md](INTEGRATION.md); evidence for the
 statements below is in [VALIDATION.md](VALIDATION.md) and [RESULTS.md](RESULTS.md).
 
-## For the QEC and surface-code owners
+## For the QEC owner
 
 **Your bicycle-chain circuit works with the noise layer as it is.** `memory_experiment(l, m, rounds,
 basis)` needs no changes. Checked for (3,7) and (4,7), both bases: measurement records, detectors and
@@ -21,53 +21,99 @@ Things I found in your circuit that you may want to know:
 
 What I need:
 
-1. **A noiseless surface-code memory circuit** (surface-code owner) with the same conventions: `TICK` between
-   layers, both bases, detectors and observables included. Please say whether X ancillas are prepared
-   and measured directly (`RX`/`MX`) or through H gates; it changes the noise count by 80 locations
-   per round at d = 9. Until then I use Stim's generated circuit, labeled `surface_reference`.
-2. **Transversal-gate and magic-state circuits** when they exist. The noise layer will accept them
+1. **Transversal-gate and magic-state circuits** when they exist. The noise layer will accept them
    if they follow the rules in INTEGRATION.md; `CZ` and `SWAP` are already supported.
-3. If atom moves become explicit in the circuit, tell me how they are marked, so transport time and
+2. If atom moves become explicit in the circuit, tell me how they are marked, so transport time and
    transport error can be attached to them.
 
-## For the simulation owner
+## For the surface-code and simulation owner
 
-**Use `decorate_stim_memory(circuit, SCENARIOS[id].noise)` to get a noisy circuit, then decode it
-however you like.** Store the scenario id and `REGISTRY_VERSION` with each result.
+**Your surface-code baseline is integrated on `udaya`** (merged from `origin/harman` at `f377d22`,
+your commits and files unchanged). It is now the surface architecture everywhere in the hardware
+layer; Stim's generated circuit is kept only as a named reference.
 
-Two things to do before trusting any logical error rate:
+What I verified independently, at d = 3, 5, 7 and 9 in both bases (your tests stop at 7):
 
-1. Run `low_weight_fault_failures(noisy_circuit, weight, samples, decoder=...)` for weights 1 and 2
-   and compare decoders on it. It is a diagnostic, not a pass/fail proof: a most-likely-error decoder
-   can legitimately mis-correct a rare single fault. On our circuit BP+OSD-0 from `ldpc`
-   mis-corrected 8 of 300 double faults; Tesseract mis-corrected none, and neither did BP+OSD with
-   literature settings (10,000 iterations, OSD-CS order 10) on 100 double faults, at about 2 s per
-   decode. The sampled failure rates differ by about 100 times in the same direction.
-2. Check `dem_logical_collisions(dem) == 0` if your decoder merges error mechanisms by detector pattern.
+- 2d² − 1 atoms, one observable, r (d² − 1) detectors, 4 CNOT layers per round.
+- Noise-location counts match hand formulas for every channel (VALIDATION.md has the table).
+- Under the full noise model the shortest undetectable error has weight d, so the schedule keeps the
+  distance with preparation, measurement and idle errors included, not only CNOT errors.
+- Because you prepare and measure X ancillas directly, the circuit has no one-qubit gates: 516 noise
+  locations per round at d = 9, against 596 for Stim's circuit. The analytic results were redone.
 
-What we measured about cost, so you can plan compute: on the 18-round [[42,6,6]] memory, the
-validation run spent 1.1 to 1.3 worker-seconds per shot at p = 1e-3 and 5.2 at p = 2e-3 with
-Tesseract (recorded wall time × 12 workers on a 14-core laptop). At the failure rates it
-gives (0 and 1 failures in 6,000 shots at p = 1e-3), resolving the paper baseline needs on the order
-of 10⁵ to 10⁶ shots per cell. That is a cluster job, not a laptop job.
+Two observations from a small fixed-shot run (RESULTS.md B2), neither established:
 
-I used Tesseract's default beam of 5. Its authors recommend a beam of 15 with beam climbing for
-bicycle codes, and it is an exact most-likely-error decoder only with an unbounded search. Record its
-low-confidence flag in production runs; my runner does not.
+- At d = 5, p = 1e-3, the Z-basis memory failed 8 times in 200,000 shots and the X-basis memory 21
+  times. If that asymmetry is real it may come from the two CNOT orders; it needs more shots.
+- Tesseract took about five times longer per shot on your d = 9 circuit than on Stim's. The circuits
+  number qubits and detectors differently and Tesseract searches in detector order, so the detector
+  ordering (or a matching decoder, which suits the surface code) is worth a look before large runs.
 
-What I need:
+**How to run the hardware scenarios in your pipeline.**
 
-1. **A production decoder** for the bicycle chain: relay-BP (IBM's `relay-bp`), or Tesseract on a
-   cluster. `relay-bp` did not build on my machine for a local reason (C toolchain license), not
-   because of the package.
-2. **Decoder-backed runs of the sweeps I could not afford**: one channel at a time (`asym/*`), the
-   T2-derived idle scenarios (`idle/*`) and the literature-anchored profile (`lit/rb87_mixed`), on
-   both architectures and both bases, with a fixed shot count per cell.
-3. **Logical error rates at matched conditions**, so that the surface distance can be chosen to match
+```python
+from qec_star import surface
+from qec_star.hardware import SCENARIOS
+from qec_star.hardware.noise import decorate_stim_memory
+
+noisy = decorate_stim_memory(surface.memory_experiment(d, 3 * d, basis), SCENARIOS[scenario_id].noise)
+```
+
+`decorate_stim_memory` replaces the test-only `with_cnot_noise` helper in your tests: it adds the
+paper's full model (preparation, gates, measurement, idle) or any registry scenario. Store the
+scenario id and `REGISTRY_VERSION` with each result.
+
+Recommended configurations, in priority order. Use r = 3d rounds, both bases, and a shot count fixed
+before sampling.
+
+| Priority | Scenario ids | Purpose | Codes |
+|---|---|---|---|
+| 1 | `paper/p1e-3` | the paper baseline | bicycle (3,7) and (4,7); surface d = 5, 7, 9 |
+| 2 | `uniform/p0.0005`, `uniform/p0.002`, `uniform/p0.003` | error scaling with p; also where failures are frequent enough to measure | same |
+| 3 | `asym/two_qubit_x2`, `asym/two_qubit_x4` | the channel that separates the two codes most (1.80 vs 1.56 in fault budget) | same |
+| 4 | `lit/rb87_mixed` | a non-uniform budget from published fidelities | same |
+| 5 | `asym/measurement_x2`, `asym/measurement_x4`, `asym/idle_x2`, `asym/idle_x4` | the idle scenarios are identical to the baseline for the bicycle circuit, so run them for the surface code only | as noted |
+| 6 | `idle/t2_1500ms/surface` and `idle/t2_1500ms/bicycle` | idle error that grows with cycle length; use the id that matches the architecture | same |
+
+Shot counts to plan for, from what we measured with Tesseract at p = 1e-3 (aim for at least 100
+failures per cell):
+
+| Code | Failure per shot seen | Shots for ~100 failures |
+|---|---|---|
+| surface d = 3 | 1.9e-3 | 6 × 10⁴ |
+| surface d = 5 | 4e-5 to 1.1e-4 | 1 to 3 × 10⁶ |
+| surface d = 7, 9 | none in 40,000 | more than 10⁶; unknown |
+| bicycle [[42,6,6]] | 1 in 12,000 (both bases together) | of order 10⁶ |
+
+At p = 2e-3 the rates are 10 to 25 times higher (surface d = 5: 1.0e-3; d = 7: 1.5e-4), so the
+elevated-noise scenarios are the practical place to measure sensitivities.
+
+Decoder notes:
+
+1. Before trusting a decoder on the bicycle circuit, compare it with Tesseract using
+   `low_weight_fault_failures(noisy_circuit, weight, samples, decoder=...)` for weights 1 and 2. It
+   is a diagnostic, not a proof: a most-likely-error decoder can legitimately mis-correct a rare
+   single fault. On the bicycle circuit BP+OSD-0 from `ldpc` mis-corrected 8 of 300 double faults and
+   gave failure rates about 100 times higher than Tesseract; Tesseract mis-corrected none, and
+   neither did BP+OSD with literature settings (10,000 iterations, OSD-CS order 10) on 100 double
+   faults, at about 2 s per decode.
+2. Check `dem_logical_collisions(dem) == 0` if your decoder merges error mechanisms by detector
+   pattern. It is 0 for both team circuits.
+3. I used Tesseract's default beam of 5. Its authors recommend a beam of 15 with beam climbing for
+   bicycle codes, and it is an exact most-likely-error decoder only with an unbounded search. Record
+   its low-confidence flag in production runs; my runner does not.
+4. Cost on the 18-round [[42,6,6]] memory was 1.1 to 1.3 worker-seconds per shot at p = 1e-3 and 5.2
+   at p = 2e-3 (recorded wall time × 12 workers on a 14-core laptop). A million shots per bicycle
+   cell is a few hundred core-hours: a cluster job.
+
+What I need back:
+
+1. **Failure counts and shot counts per cell** for the configurations above, in both bases, with the
+   decoder settings. If you keep the record fields in INTEGRATION.md, the figures regenerate.
+2. **Logical error rates at matched conditions**, so that the surface distance can be chosen to match
    the bicycle code's reliability before space-time costs are compared.
 
-The runner in `experiments.py` is small on purpose. Replace it with your pipeline; keep the record
-fields if you can, so the figures regenerate.
+The runner in `experiments.py` is deliberately small and is not meant to replace your pipeline.
 
 ## For the Hamiltonian / algorithm owner
 
@@ -93,10 +139,12 @@ times are assumptions. A measured neutral-atom QEC round currently takes about 4
 
 ## For everyone
 
-- Nothing outside `src/qec_star/hardware/`, `tests/test_udaya_*.py`, `docs/udaya/` and
-  `results/udaya/` was changed. `pyproject.toml` is untouched.
+- I changed nothing outside `src/qec_star/hardware/`, `tests/test_udaya_*.py`, `docs/udaya/` and
+  `results/udaya/`. `src/qec_star/surface.py` and `tests/test_surface.py` are on `udaya` exactly as
+  they are on `origin/harman`. `pyproject.toml` is untouched.
 - Optional packages I used that are not in `pyproject.toml`: `tesseract-decoder` (the decoder used for the validation run)
   and `jupyter` (to run the notebook). If the team wants Tesseract as a declared dependency, it is a
   one-line addition for whoever owns `pyproject.toml`.
 - Please confirm the integration branch before I open a pull request. `udaya` is based on
-  `epa-branch` at `0dc22d9` and has not been merged anywhere.
+  `epa-branch` at `0dc22d9`, contains `origin/harman` at `f377d22`, and has not been merged anywhere.
+  Nothing was pushed to `harman` or `epa-branch`.

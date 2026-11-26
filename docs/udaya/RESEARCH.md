@@ -106,8 +106,8 @@ Each entry was checked against Crossref or arXiv metadata, and numbers against t
 
 | ID | What varies | What is held | Output | Status |
 |---|---|---|---|---|
-| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | sampled with Tesseract: upper bounds only |
-| E2 | uniform p | everything else | failure vs p | one point (2e-3, Z basis) sampled; bounds only |
+| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | sampled with Tesseract on both team circuits: bounds, or coarse estimates at surface d ≤ 5 |
+| E2 | uniform p | everything else | failure vs p | one point (2e-3, Z basis) sampled |
 | E3 | two-qubit error × {0.5, 2, 4} | other channels at 1e-3 | fault budget; relative failure | fault budget done (exact); sampling not run |
 | E4 | measurement, idle × {0.5, 2, 4}; literature-anchored profile | other channels at 1e-3 | fault budget; relative failure | fault budget done (exact); sampling not run |
 | E5 | cycle ratio; T2-derived per-round idle | paper noise | break-even curves; fault budget | done (analytic); sampling not run |
@@ -115,7 +115,7 @@ Each entry was checked against Crossref or arXiv metadata, and numbers against t
 | E7 | heralded loss | | | not started; needs loss-aware circuits and a decoder |
 
 Sampling for E3-E5 needs 10⁵ to 10⁶ shots per cell at roughly 1 to 5 worker-seconds per shot and is handed to
-the simulation owner (HANDOFF.md).
+the surface-code and simulation owner (HANDOFF.md), with recommended configurations.
 
 Rules applied to every sampled experiment: one sample per shot (failure = any observable wrong);
 a shot count fixed before sampling; 95% Wilson intervals; seeds derived from the circuit hash; the
