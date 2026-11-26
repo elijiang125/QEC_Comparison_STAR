@@ -44,8 +44,8 @@ The team's `memory_experiment` and Stim's generated surface-code circuits both s
 
 | I need | From | Status | Used for |
 |---|---|---|---|
-| Noiseless bicycle-chain memory circuit | QEC (Epameinondas) | available (`circuits.py`) | all bicycle results |
-| Noiseless surface-code memory circuit with the same conventions | surface baseline (Harman) | **missing**; Stim's generated circuit is a labeled stand-in (`surface_reference`) | all surface results |
+| Noiseless bicycle-chain memory circuit | QEC owner | available (`circuits.py`) | all bicycle results |
+| Noiseless surface-code memory circuit with the same conventions | surface-code owner | **missing**; Stim's generated circuit is a labeled stand-in (`surface_reference`) | all surface results |
 | A decoder for the bicycle circuit that is accurate at production speed | simulation owner | **partly**: Tesseract works but costs 1 to 5 worker-seconds per shot at 18 rounds; BP+OSD-0 from `ldpc` is about 100 times worse (see VALIDATION.md) | any logical error rate worth quoting |
 | Transversal-gate and magic-state circuits | QEC | missing | noise beyond memory |
 | Logical qubit count, V_RZ, V_Cliff, factory count and size, error budget | Hamiltonian / algorithm owner | missing | end-to-end resources with Eqs. (32)-(33) |

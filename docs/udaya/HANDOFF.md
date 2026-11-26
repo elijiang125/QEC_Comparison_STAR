@@ -4,7 +4,7 @@ What each teammate can use from the hardware workstream today, and what the hard
 needs from them. Interfaces are specified in [INTEGRATION.md](INTEGRATION.md); evidence for the
 statements below is in [VALIDATION.md](VALIDATION.md) and [RESULTS.md](RESULTS.md).
 
-## For the QEC team (Epameinondas, Harman)
+## For the QEC and surface-code owners
 
 **Your bicycle-chain circuit works with the noise layer as it is.** `memory_experiment(l, m, rounds,
 basis)` needs no changes. Checked for (3,7) and (4,7), both bases: measurement records, detectors and
@@ -21,7 +21,7 @@ Things I found in your circuit that you may want to know:
 
 What I need:
 
-1. **A noiseless surface-code memory circuit** (Harman) with the same conventions: `TICK` between
+1. **A noiseless surface-code memory circuit** (surface-code owner) with the same conventions: `TICK` between
    layers, both bases, detectors and observables included. Please say whether X ancillas are prepared
    and measured directly (`RX`/`MX`) or through H gates; it changes the noise count by 80 locations
    per round at d = 9. Until then I use Stim's generated circuit, labeled `surface_reference`.

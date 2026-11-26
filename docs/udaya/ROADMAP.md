@@ -25,7 +25,7 @@ marked done only if its artifacts are committed on `udaya`.
    ≥ 100 failures per cell, then the one-channel, idle and literature-anchored scenarios. *Done
    when:* each cell has ≥ 100 failures or a stated bound from a fixed shot count, the decoder has
    been compared with Tesseract on the low-weight fault check, and its low-confidence events are recorded.
-2. **The team's surface-code circuit** (Harman) in place of Stim's generated one. *Done when:* the
+2. **The team's surface-code circuit** (surface-code owner) in place of Stim's generated one. *Done when:* the
    noise-location test is updated to its structure and the baseline is rerun.
 3. **Matched-reliability comparison.** Choose the surface distance whose logical error matches the
    bicycle code's, then compare space-time cost. *Done when:* both error rates are quoted with intervals.
