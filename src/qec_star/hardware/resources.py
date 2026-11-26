@@ -10,6 +10,7 @@ architecture comparison only at matched workload and reliability target.
 from dataclasses import dataclass
 from math import ceil
 
+from .. import surface
 from ..codes import bicycle_chain
 from ..gf2 import css_k
 from .models import nonnegative
@@ -49,11 +50,15 @@ class BlockFootprint:
 
 
 def surface_block(d: int) -> BlockFootprint:
-    """Rotated surface-code patch [[d^2, 1, d]]: d^2 data, d^2 - 1 ancillas."""
+    """Rotated surface-code patch [[d^2, 1, d]]: d^2 data, d^2 - 1 ancillas.
+
+    The counts come from the team's surface-code module, so they are the
+    atoms its circuit actually uses.
+    """
     positive_int(d, "distance")
     if d < 3 or d % 2 == 0:
         raise ValueError("use an odd rotated-surface-code distance >= 3")
-    return BlockFootprint(d*d, d*d-1, 1)
+    return BlockFootprint(surface.num_data(d), surface.num_ancilla(d), 1)
 
 
 def bicycle_block(l: int, m: int = 7) -> BlockFootprint:

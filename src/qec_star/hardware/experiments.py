@@ -24,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .. import surface
 from ..circuits import memory_experiment
 from .models import NoiseProfile
 from .noise import decorate_stim_memory, noise_census
@@ -138,27 +139,31 @@ def low_weight_fault_failures(circuit, weight: int, samples: int, *, seed: int =
 class Cell:
     """One point of an experiment grid."""
     experiment: str                 # e.g. "E1"
-    architecture: str               # "bicycle" or "surface_reference"
-    code: tuple                     # (l, m) for bicycle, (d,) for surface
+    architecture: str               # "bicycle", "surface" or "surface_reference"
+    code: tuple                     # (l, m) for bicycle, (d,) for either surface circuit
     basis: str                      # "X" or "Z"
     rounds: int
     noise: NoiseProfile
     scenario_id: str = "custom"
 
     def circuit(self):
-        """The noiseless memory circuit for this cell."""
-        import stim
+        """The noiseless memory circuit for this cell.
+
+        "surface" is the team's rotated surface code (qec_star.surface), which
+        prepares and measures X ancillas directly. "surface_reference" is
+        Stim's generated circuit, which uses Hadamard gates instead; it was the
+        stand-in before the team's circuit existed and is kept for comparison
+        and so that the earlier records stay reproducible.
+        """
         if self.basis not in ("X", "Z"):
             raise ValueError("basis must be 'X' or 'Z'")
         if self.architecture == "bicycle":
             l, m = self.code
             return memory_experiment(l, m, self.rounds, basis=self.basis)
+        if self.architecture == "surface":
+            return surface.memory_experiment(*self.code, self.rounds, basis=self.basis)
         if self.architecture == "surface_reference":
-            # TEMPORARY stand-in until the team's surface-code circuit exists:
-            # Stim's generated rotated memory circuit, with no built-in noise.
-            (d,) = self.code
-            return stim.Circuit.generated(f"surface_code:rotated_memory_{self.basis.lower()}",
-                                          distance=d, rounds=self.rounds)
+            return surface.stim_reference(*self.code, self.rounds, basis=self.basis)
         raise ValueError(f"unknown architecture {self.architecture!r}")
 
     def noisy_circuit(self):
@@ -351,8 +356,10 @@ def load_records(path) -> list:
 
 
 def validation_cells() -> list:
-    """A small grid that a laptop can decode with Tesseract in under an hour.
+    """The first validation grid, run before the team's surface circuit existed.
 
+    Kept unchanged so that results/udaya/validation_tesseract.jsonl stays
+    reproducible; its surface cells use the Stim reference circuit.
     E1: the paper baseline (p = 1e-3, r = 3d rounds, both bases).
     E2: one elevated uniform noise level (p = 2e-3, Z basis).
     Channel-by-channel sweeps (E3-E5) need far more shots than this at the
@@ -372,3 +379,28 @@ def validation_shots(cell: Cell) -> int:
     if cell.architecture != "bicycle":
         return 40_000
     return 6_000 if cell.noise.two_qubit <= 1e-3 else 2_400
+
+
+def surface_integration_cells() -> list:
+    """Team surface circuit at d = 3, 5, 7, 9, plus the Stim reference at d = 3.
+
+    Same scenarios and rounds (3d) as `validation_cells`, so each team-circuit
+    cell at d = 5, 7, 9 has a Stim-reference counterpart in the earlier file.
+    The d = 3 reference was not in that file and is added here.
+    """
+    cells = []
+    for arch, distances in (("surface", (3, 5, 7, 9)), ("surface_reference", (3,))):
+        for d in distances:
+            for sid, basis in (("paper/p1e-3", "Z"), ("paper/p1e-3", "X"), ("uniform/p0.002", "Z")):
+                experiment = "E1" if sid.startswith("paper") else "E2"
+                cells.append(Cell(experiment, arch, (d,), basis, 3 * d, SCENARIOS[sid].noise, sid))
+    return cells
+
+
+def surface_integration_shots(cell: Cell) -> int:
+    """Fixed in advance from decoding cost: more shots where they are cheap."""
+    return 200_000 if cell.code[0] <= 5 else 40_000
+
+
+GRIDS = {"baseline": (validation_cells, validation_shots),
+         "surface": (surface_integration_cells, surface_integration_shots)}
