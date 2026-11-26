@@ -1,59 +1,66 @@
-# Udaya workstream — STAR hardware and noise modeling
+# Hardware and noise modeling workstream (Udaya)
 
-**Status:** initial implementation and research plan, not a completed replication.
-**Integration base:** `epa-branch` at `0dc22d9aabac2016ca9f0040136c2aacecb3ddb8` (observed Nov 25, 2026).
-**Primary paper:** [Ismail et al., arXiv:2606.25011v1](https://arxiv.org/html/2606.25011v1).
+Branch `udaya`, based on `epa-branch` at `0dc22d9`. Primary paper:
+[Ismail et al., arXiv:2606.25011v1](https://arxiv.org/html/2606.25011v1).
 
-## Scope and ownership
+**Question.** Does the bicycle-chain qLDPC STAR architecture keep its space-time advantage over
+surface-code STAR once hardware overhead and non-uniform noise are considered?
 
-Own hardware assumptions, noise channels, cycle and footprint accounting, and hardware sensitivity analysis. The simulation/decoder teammate owns sampling, decoder selection and logical failure estimates; the QEC team owns parity-check matrices, logical operators, syndrome schedules and circuits; the Hamiltonian teammate owns problem compilation and algorithm-level volumes. Coordinate interfaces and share paper writing. This allocation is proposed pending team confirmation. The shared project Google Doc was permission-blocked during preparation; do not treat these notes as its replacement.
+**Where things stand.** The noise model, timing model, scenario registry, resource accounting and
+experiment runner are implemented and tested. The analytic results are final. The sampled results are
+a pilot only: the one decoder available in the repository's dependencies is not good enough for the
+bicycle-chain circuit, so the paper's logical error rates are not reproduced. Details are in
+[RESULTS.md](RESULTS.md) and [VALIDATION.md](VALIDATION.md).
 
-## Start here
+## Scope
 
-From the repository root, with Python >=3.12 (existing project requirement):
+This workstream owns hardware assumptions, noise channels, cycle-time and atom accounting, and the
+hardware sensitivity analysis. It consumes the QEC team's circuits and does not build parity-check
+matrices, syndrome schedules, decoders, the Hamiltonian compilation, or the non-Clifford simulation.
+
+## Quick start
 
 ```sh
-python3.12 -m venv .venv
-source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install -e '.[dev]'
-python -m pytest -q tests/test_udaya_hardware.py tests/test_udaya_noise.py
-python -m pytest -q
-python -m qec_star.hardware --logical-count 64
+python -m pytest -q                                   # 186 tests
+python -m qec_star.hardware --logical-count 64        # memory footprint of both architectures
+python -m qec_star.hardware scenarios                 # the scenario registry, as JSON
+python -m qec_star.hardware pilot --out results/udaya/pilot.jsonl --workers 12
+python -m qec_star.hardware figures --pilot results/udaya/pilot.jsonl --out docs/udaya/figures
 ```
 
-The command-line report prints an idealized memory allocation and loss-free reference parameters. It is not Fig. 5 replication or a logical-error benchmark. Stim adapter tests require the existing Stim dependency. The starter was checked locally with Python 3.13: 16 pure-Python tests passed; the Stim test module was skipped (Stim unavailable). Upstream suites and actual hardware were not tested in that environment. Re-run all tests in a fully installed checkout before merging.
+The pilot takes roughly an hour on a 14-core laptop. The other commands take seconds.
 
-## Files
+## Layout
 
-- `docs/udaya/ROADMAP.md`: research question, milestones and acceptance gates.
-- `docs/udaya/RESEARCH.md`: literature, baseline parameters, limitations and experimental design.
-- `src/qec_star/hardware/models.py`: immutable noise and timing parameters.
-- `src/qec_star/hardware/noise.py`: strict Stim decorator for flat, noiseless memory circuits.
-- `src/qec_star/hardware/resources.py`: idealized block and Appendix D.5 resource bookkeeping.
-- `src/qec_star/hardware/__main__.py`: JSON memory-footprint example.
-- `tests/test_udaya_hardware.py`, `tests/test_udaya_noise.py`: pure arithmetic and Stim-dependent tests.
+| Path | Contents |
+|---|---|
+| `src/qec_star/hardware/models.py` | `NoiseProfile`, `CycleTiming`, fidelity and dephasing conversions |
+| `src/qec_star/hardware/noise.py` | `decorate_stim_memory`: adds noise to a noiseless Stim circuit; `noise_census` |
+| `src/qec_star/hardware/scenarios.py` | versioned registry of noise and timing scenarios with provenance |
+| `src/qec_star/hardware/resources.py` | exact block accounting; the paper's Eqs. (32)-(33) |
+| `src/qec_star/hardware/experiments.py` | deterministic pilot runner, statistics, decoder acceptance check |
+| `src/qec_star/hardware/figures.py` | figures from recorded data |
+| `tests/test_udaya_*.py` | 118 tests |
+| `results/udaya/pilot.jsonl` | raw pilot records, one JSON object per cell |
+| `docs/udaya/figures/` | figures and `analytic.json` |
 
-## Integration contract
+## Documents
 
-```python
-from qec_star.circuits import memory_experiment
-from qec_star.hardware.models import NoiseProfile
-from qec_star.hardware.noise import decorate_stim_memory
-
-clean = memory_experiment(3, 7, rounds=18, basis="Z")
-noisy = decorate_stim_memory(clean, NoiseProfile.paper(),
-                             active_qubits=range(clean.num_qubits))
-# Simulator teammate consumes this circuit and its detector error model.
-dem = noisy.detector_error_model(decompose_errors=False)
-```
-
-For surface memory, pass a *noiseless* flattened Stim circuit and an explicit set of actually allocated qubit IDs. `num_qubits` can include gaps in generated surface-code IDs. Do not add noise twice. No decoder is bundled. Do not use Stim for exact non-Clifford TMR state simulation. Unsupported instructions fail loudly. The initial decorator intentionally requires TICK-delimited, non-overlapping entangling moments and does not simulate transport, leakage or atom loss. Agree on any changes with circuit owners.
+| File | Read it for |
+|---|---|
+| [RESULTS.md](RESULTS.md) | findings, figures, and methodology and limitations text for the paper |
+| [RESEARCH.md](RESEARCH.md) | what the paper and the hardware literature say; the experiment matrix |
+| [ASSUMPTIONS.md](ASSUMPTIONS.md) | every parameter with its source and evidence class |
+| [VALIDATION.md](VALIDATION.md) | what was tested and how; the decoder check |
+| [INTEGRATION.md](INTEGRATION.md) | interfaces, circuit requirements, dependencies on teammates |
+| [ROADMAP.md](ROADMAP.md) | status, remaining work and acceptance criteria |
 
 ## Working rules
 
-- Keep additions under this namespace and `docs/udaya/`; do not rewrite the QEC modules or teammates' tests.
-- Keep the paper baseline unchanged. Add separately labeled sensitivity scenarios.
-- Preserve raw counts, seeds, configuration, code commit and decoder/version; never fabricate logical errors or results.
-- Keep physical data qubits, ancillas, factories, spare atoms and number of concurrent shots separate.
-- Present null/negative findings and uncertainty; a simulated hardware scenario is not a device calibration.
-- Open a scoped PR only after the team agrees on a merge target and all required tests are green.
+- The paper baseline (`paper/p1e-3`) is never edited. Anything else is a separately named scenario.
+- No number enters the code without an entry in ASSUMPTIONS.md.
+- Results are stored with seeds, configuration, commit and decoder settings. Nothing is plotted that is not in a recorded file.
+- Teammates' modules and tests are not modified. Problems found in them are reported with a minimal reproduction.
+- No pull request until the team confirms the integration branch.

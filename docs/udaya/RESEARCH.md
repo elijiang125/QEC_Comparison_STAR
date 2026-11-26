@@ -1,65 +1,119 @@
-# Research brief: hardware-aware STAR comparison
+# Research notes: hardware-aware STAR comparison
 
 ## Question
 
-For matched simulation workloads and logical error budgets, how sensitive is the high-rate bicycle-chain STAR advantage to hardware latency, asymmetric physical noise and (if feasible) heralded atom loss? Keep the original paper's reproduction and exploratory sensitivity experiments separate. A memory-only study is a useful intermediate result, not evidence of an end-to-end algorithm speedup.
+Does the bicycle-chain qLDPC STAR architecture keep its space-time advantage over surface-code STAR
+when hardware operational overhead and non-uniform physical noise are taken into account?
 
-## Primary baseline and definitions
+This is an investigation, not a defense of the paper. Faithful reproduction of the paper's model and
+exploratory extensions are kept apart throughout: the registry marks each scenario `reference` or
+`exploratory`, and RESULTS.md reports them in separate sections.
 
-[Ismail et al., Fast and Parallel High-Rate STAR Architecture for Megaquop Quantum Simulation, arXiv:2606.25011v1 (2026)](https://arxiv.org/html/2606.25011v1), especially Secs. II.3, III.1–III.2, App. B.2–B.3, C.3–C.4 and D.5/Table IV.
+## The primary paper
 
-| Quantity | Surface STAR | Bicycle-chain STAR |
-|---|---:|---:|
-| Reference code | rotated d=9 | [[14l,2l,6]], m=7 |
-| Data qubits per logical | 81 | 7 |
-| Data + check ancillas per logical, idealized | 161 | 14 |
-| Entangling syndrome layers | 4 | 8 |
-| Nominal cycle duration | 1 ms | 2 ms |
-| Baseline physical channel probability | 0.001 | 0.001 |
-| Atom loss in reference resource estimate | none | none |
-| Reference memory rounds | 3d | 3d |
+Ismail, Kornjača, Hu, Maskara, Wang, Zhou, Zhao, *Fast and Parallel High-Rate STAR Architecture for
+Megaquop Quantum Simulation*, [arXiv:2606.25011v1](https://arxiv.org/html/2606.25011v1) (23 June 2026).
+Read in full from the arXiv HTML. Parameter-level provenance is in ASSUMPTIONS.md; this section
+records what the paper claims and what it leaves open.
 
-Use code distance versus circuit distance carefully (App. B.2 reports circuit-level d−1 for the selected bicycle schedule). The `m=7` family is the initial scope; higher-distance code extensions must follow the QEC team's validated implementation.
+**Codes.** Bicycle chain [[2lm, 2l, d ≤ m]] from a(x,y) = 1 + y³ + xy² + xy⁴ on an l × m torus,
+self-dual with weight-8 checks. Main instances [[14l, 2l, 6]] (m = 7); l = 3 gives [[42,6,6]], and
+l = 4 gives the k = 8 block used for the rotation gadget. The surface baseline is the rotated d = 9
+code from the earlier transversal paper.
 
-Baseline channel semantics (Sec. III): preparation followed by one-qubit depolarization; measurement outcome flip; one- and two-qubit depolarization after respective gates; unused allocated qubits receive one-qubit depolarization during entangling layers. These are probabilities per operation/layer, not rates per unit time. The physical error parameter is not a directly interchangeable average gate infidelity. The baseline omits atom loss.
+**Syndrome extraction.** Depth-8 CNOT schedule (Table 2), one ancilla per check. Of 212 valid
+schedules for d = 6, 192 have fault distance 4 and 20 have fault distance 5; the paper uses one of
+the 20. So the circuit-level distance is 5, not 6.
 
-The architecture uses reconfigurable arrays: two data and two check-ancilla arrays for each bicycle block. Matching arrays can be brought together for parallel entanglement; uniform single-qubit pulses implement global H/S; cyclic permutations can be achieved with AOD transport. A one-site wraparound uses two moves with one AOD array or one with two arrays in the paper's abstraction. The actual movement schedule, transfer error, contention, spare atoms, readout and reloading latency are not measured here. Do not infer them from entangling depth alone.
+**Noise.** Uniform depolarizing, p = 1e-3, no loss in the headline numbers. Loss enters only as a
+heralded erasure fraction f of each error budget, handled by discarding shots (f = 0.7 in the
+abstract's numbers, f = 0 in Fig. 5).
 
-The paper estimates ~2,240 physical qubits and ~200 s/shot for an 8×8 TFIM example and ~5.5× smaller space than its surface STAR comparator at comparable speed. These are projected end-to-end resources, not measured device outputs or the result of this starter. The independent two-shot convention is important: throughput-normalized seconds/shot is not wall latency. App. D.5 estimates physical footprint and runtime from rotation/Clifford volumes and factory allocation; keep its approximate ancilla factor distinct from exact block counting. Use identical Hamiltonian, Trotter schedule, simulation time and error budget before claiming a resource advantage.
+**Timing.** Cycle times 1 ms (surface), 1.5 ms (BB/GB) and 2 ms (bicycle chain), justified only by
+stabilizer weight. No gate, movement, readout or reset duration appears anywhere in the paper.
+One cyclic shift needs two moves with one AOD array, or one move with two.
 
-## Secondary evidence and provenance
+**Resource model (App. D.5).**
 
-| Source | What it contributes | Limitation / how to use |
+    Q_phys = 2 (Q_data + Q_magic)                              (32)
+    t_run  = (V_RZ / Q_magic + V_Cliff / Q_data) × t_cycle     (33)
+    Q_data = n_logical × n/k,   Q_magic = n_factories × n_factory
+
+The bicycle architecture runs two instances side by side: twice the atoms, per-shot time t_run/2.
+
+**Headline claims.** For an 8×8 transverse-field Ising simulation: 1,904 to 3,584 qubits and 88 to
+116 s per shot at f = 0; "surface STAR achieves ε_gate = 0.46 (TFIM) and 0.84 (FH) at 5.5× and 5.7×
+the qubit count". The abstract's 2,240 qubits and ~200 s per shot are at f = 0.7 and a longer
+simulated time. Reported logical error scales: transversal CNOT ~1e-7 per logical (bicycle, k = 8)
+against ~4e-6 (surface d = 9).
+
+**Open problems the paper names (Sec. IV).** Structured, biased hardware noise; syndrome extraction
+under atom loss; real-time decoding (their MLE decoder does not scale); simulation methods that
+combine non-Clifford gates with loss.
+
+### Things we noticed while reading
+
+1. **The two codes are not at equal reliability.** The comparison pairs a d = 6 bicycle code decoded
+   with relay-BP/MLE against a d = 9 surface code decoded with MWPF, which the paper itself calls
+   suboptimal. The 5.5× is a ratio at the paper's chosen operating points, not at matched logical error.
+2. **Internal inconsistency.** The Fig. 5 caption lists the surface-STAR accumulated gate error as
+   0.32 / 0.31; the Sec. III.2 text gives 0.46 / 0.84. We could not resolve this from the HTML.
+3. **Factor of two.** Eq. (32) doubles for ancillas; the two-instance doubling is described separately.
+   Whether the quoted qubit counts include one or both is not explicit.
+4. **A consistency check we can do.** 1,904 = 34 × 56, 3,584 = 64 × 56 and 2,240 = 40 × 56, where 56
+   is the data-qubit count of one [[56,8,6]] block. A 64-qubit simulation needs 8 such blocks (448
+   data qubits), so the rest is magic-state space: at the smallest point, data storage is under half
+   of the footprint. This is our inference from the numbers, not a statement in the paper.
+5. **Rendering artifact.** Sec. III.1 of the HTML shows "88 versus 44" for the entangling depths;
+   this is 8 versus 4 (Sec. II.3 states depth 8).
+6. **No public code.** App. D refers to an accompanying open-source package, but the paper gives no link.
+
+## Supporting literature
+
+Each entry was checked against Crossref or arXiv metadata, and numbers against the full text
+(arXiv versions for the 2025-2026 papers). Corrections to the starter notes are marked.
+
+| Source | What it gives us | Limits |
 |---|---|---|
-| [Ismail et al., PRX Quantum 7, 020343 (2026)](https://doi.org/10.1103/j2fw-ccmy) / [preprint](https://arxiv.org/abs/2509.18294) | Surface transversal STAR, logical gadget costs, neutral-atom implementation and direct analog rotations | Read full methods before borrowing a device-specific parameter. Do not conflate with the high-rate paper's uniform baseline. |
-| [Evered et al., Nature 622, 268–272 (2023)](https://doi.org/10.1038/s41586-023-06481-y) | Experimental parallel CZ benchmarks near 99.5% | Fidelity is protocol/device dependent, not directly a Stim probability. |
-| [Evered et al., Science 394, 197–201 (2026)](https://doi.org/10.1126/science.aei1312); [MIT-Harvard abstract](https://cua.mit.edu/publications/high-fidelity-entangling-gates-and-nonlocal-circuits-with-neutral-atoms) | 99.854(4)% CZ fidelity, 99.941(3)% conditional on loss postselection | Conditional and unconditional figures must not be mixed or double-counted with a separate loss channel. Not a full-system calibration. |
-| [Bluvstein et al., Nature, doi:10.1038/s41586-025-09848-5](https://doi.org/10.1038/s41586-025-09848-5) / [NIST abstract](https://www.nist.gov/publications/fault-tolerant-neutral-atom-architecture-universal-quantum-computation) | Reconfigurable zones, repeated QEC, loss-resolved measurement and mid-circuit reuse on a system of up to 448 atoms | Device results justify modeling choices, not a claim that STAR's resource projections have been demonstrated. |
-| [Quantum error correction resilient against atom loss, Quantum (2025)](https://quantum-journal.org/papers/q-2025-10-13-1884/) | Loss detection and adaptive decoding can change logical performance | Surface-code-specific mechanisms and thresholds cannot be transferred directly to bicycle chain. |
-| [Stim gate/API documentation](https://github.com/quantumlib/Stim/wiki) | Clifford sampling, measurement errors, detectors and DEMs | Stim alone does not exactly simulate arbitrary-angle TMR, nor automatically provide a correct erasure-aware decoder. |
+| Ismail et al., *Transversal Architecture for Megaquop-Scale Quantum Simulation with Neutral Atoms*, PRX Quantum 7, 020343 (2026), arXiv:2509.18294. **Corrected**: the published title has no "STAR" | The surface-code STAR baseline: rotated code, d = 3-7 simulated and d = 9 extrapolated, MWPF decoder, and a Z-biased hardware-derived Pauli model (CZ ZZ error 1.3e-3, measurement flip 4e-3, per-move Pauli about 2.8e-4) with loss folded into a Pauli-Y channel | A different noise model from the primary paper. It states no physical cycle time, only clock cycles and a uniform ~200 µs transport. All values are model inputs |
+| Evered et al., *High-fidelity parallel entangling gates on a neutral-atom quantum computer*, Nature 622, 268 (2023) | CZ fidelity 99.52(4)% and 99.54(2)% on up to 60 atoms in parallel; global 1-qubit 99.97% | Loss was not measured separately; no gate duration in the text we read |
+| Evered, Xu, Li et al., *High-fidelity entangling gates and nonlocal circuits with neutral atoms*, Science 394, 197 (2026), arXiv:2604.25987 | CZ 99.854(4)% raw and 99.941(3)% when neither atom is lost; loss 0.054(2)% per atom per CZ, about 60% of the error | Post-selection happens at the end of the sequence, not mid-circuit. Numbers from arXiv v1 |
+| Bluvstein et al., *A fault-tolerant neutral-atom architecture for universal quantum computation*, Nature 649, 39 (2026), arXiv:2506.20661. **Corrected**: volume and year | Up to 448 atoms; measured QEC round of 4.45 ms; 270 ns CZ; coherence 1-2 s; non-destructive readout with 0.3% loss; "roughly half of our errors being loss" | Timings are explicitly not optimized for speed. No single loss-per-round number |
+| Bluvstein et al., Nature 604, 451 (2022) and Nature 626, 58 (2024) | Transport physics (constant-jerk moves, time ∝ √distance, 55 µm in 200 µs before loss), 500 µs mid-circuit imaging, T2 = 1.5 s | Earlier machines; per-move fidelity is not reported cleanly |
+| Xu et al., *Constant-Overhead Fault-Tolerant Quantum Computation with Reconfigurable Atom Arrays*, arXiv:2308.08648 | A worked timing model for qLDPC codes with atom rearrangement: 24 ms per stabilizer round for a 10⁴-qubit hypergraph-product code | Assumed parameters; a different code family with long-range moves |
+| Zhou et al., arXiv:2505.15907 | Source of the common 1 ms cycle assumption (500 µs move pipelined with 500 µs measurement) | Assumed |
+| Perrin, Jandura, Pupillo, *Quantum Error Correction resilient against Atom Loss*, Quantum 9, 1884 (2025) | Loss-aware decoding of the surface code; loss threshold about 2.6% | Surface code only; independent loss per CZ. Does not transfer to the bicycle chain without new work |
+| Müller et al., arXiv:2506.01779 (relay-BP); Wu et al., arXiv:2508.04969 (MWPF) | The decoders the paper relies on | Neither is available in this repository's dependencies |
+| Gidney, *Stim*, Quantum 5, 497 (2021) | Exact semantics of `DEPOLARIZE1/2` and `M(p)` | Clifford only: cannot simulate the arbitrary-angle rotation gadget |
+| Wu et al., Nat. Commun. 13, 4657 (2022); Ma et al., Nature 622, 279 (2023); Scholl et al., Nature 622, 273 (2023) | Erasure conversion: what fraction of errors can be heralded | Yb and Sr platforms, not the Rb-87 platform assumed here |
 
-For every future numeric hardware parameter, record source identifier, version/date, section/table, measured vs assumed vs derived, device, units, denominator, uncertainty, conditionality and conversion method. If modeling an idealized d-dimensional depolarizing Pauli channel, average infidelity r maps to total nonidentity Pauli probability p=(d+1)r/d (d=2 for one qubit; d=4 for two). This is an explicit modeling assumption, not a general conversion for arbitrary real hardware noise. Do not apply it to conditional fidelity without separately accounting for survival.
+## What the literature implies for our question
 
-## Proposed experiment matrix (not measured parameters)
+- **Timing.** The paper's cycle times are proportional to stabilizer weight with no fixed term. On
+  real hardware a round is dominated by transport and readout (2.57 ms of the measured 4.45 ms is
+  moving ancillas). Any time that does not scale with the number of entangling layers moves the
+  bicycle/surface cycle ratio below 2, which favors the bicycle chain. Longer moves per layer for the
+  bicycle chain (its checks reach up to 4 sites away) would push the other way. Neither is in the paper.
+- **Noise composition.** Measured errors are Z-biased and more than half loss. A uniform depolarizing
+  p is a summary, not a description. The bicycle circuit is dominated by two-qubit gate noise more
+  strongly than the surface circuit (see RESULTS.md), so it is the more exposed of the two to the CZ error.
+- **Idle error.** With T2 between 1 and 2 s, waiting 1 ms costs a Z error of 2.5e-4 to 5e-4, the same
+  order as the gate error itself at p = 1e-3. The paper charges nothing for it, and the bicycle cycle
+  is twice as long.
 
-1. **Baseline verification:** compare exact noise instructions and detector/observable counts in loss-free Stim circuits at p=0 and p=0.001. Use 3d rounds for each code to reproduce the paper's protocol; label different durations. Sample X and Z memories separately. Compare the same model under multiple seeds. Do not infer decoding performance from raw detector firing.
-2. **Pauli sensitivity:** uniform p in {0.0005,0.001,0.002,0.003}; one-factor-at-a-time multipliers {0.5,1,2,4} on two-qubit, measurement and idle probabilities; leave all other rates at 0.001. These are synthetic sweeps, not a device error budget. Optional biased X/Z channels only after defining their total probability and decoder support.
-3. **Timing sensitivity:** baseline cycle ratio r=t_bicycle/t_surface=2. Sweep r in {1,1.5,2,3,4}, preserving baseline and holding circuit assumptions explicit. An illustrative serialized timing model uses t_cycle=t_fixed+L*(t_gate_layer+t_move_layer), with duration per parallel layer. Never count a global parallel move once for every atom. For time-dependent noise, introduce separate per-duration models; do not silently vary the paper's per-layer p with latency.
-4. **Loss-aware extension (optional):** define loss per operation, whether the flag is available immediately, behavior of subsequent gates on lost atoms, replacement schedule, and the decoder's use of erasure information. Start with a small circuit and known erasure checks. Do not treat a lost atom as an ordinary X error or a known erasure if the flag is unavailable. The paper's f is a fraction of physical errors modeled as heralded erasures, not a standalone per-gate loss probability. If decoder integration cannot be validated, report loss as future work, not a simulated logical rate.
-5. **Resource sensitivity:** use validated logical failure rates to choose comparable error budgets; sweep factory counts, distinguish exact block versus D.5 estimated footprint, include both wall time and throughput. Inputs for rotations/Cliffords come from the algorithm team. Report the threshold at which advantage disappears, if observed; otherwise bound it within tested conditions. A normalized illustrative cost sweep is acceptable if inputs and missing calibration are stated.
+## Experiment matrix
 
-## Scientific comparison checklist
+| ID | What varies | What is held | Output | Status |
+|---|---|---|---|---|
+| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | pilot run; decoder-limited |
+| E2 | uniform p ∈ {5e-4, 1e-3, 2e-3} | everything else | failure vs p | pilot run; decoder-limited |
+| E3 | two-qubit error × {0.5, 2, 4} | other channels at 1e-3 | relative failure | pilot run |
+| E4 | measurement, idle × {0.5, 2, 4}; literature-anchored profile | other channels at 1e-3 | relative failure | pilot run |
+| E5 | cycle ratio; T2-derived per-round idle | paper noise | break-even curves; failure with idle | analytic done; pilot run |
+| E6 | logical qubit count, block size | exact counting | physical qubits | done (analytic) |
+| E7 | heralded loss | | | not started; needs loss-aware circuits and a decoder |
 
-- Report n/k/d, circuit distance where known, physical qubits including ancillas, both bases, memory rounds, cycle duration and decoder configuration.
-- Use per-shot block failure (any observable) and per-observable failure with explicit denominators; correlations within one block prohibit pretending k outcomes are independent shots. Follow the source's exact per-round convention before comparing Fig. 4; if using parity-flip conversion, state independent symmetric flip assumptions. Do not use raw detector rate as logical error.
-- For a common-time memory comparison, match physical horizon separately from 3d baseline tests. For a common-reliability resource comparison, select codes only once confidence intervals support the target.
-- Pilot 1,000 shots per cell, then adaptive collection with predeclared stop rule (e.g. >=100 failures or >=1e6 shots); report 95% binomial intervals per independent shot and bounds for zero failures. Record seeds, shots, failures, runtime, package versions, source commit and circuit hash. No zero-failure claim of zero error.
-- Use the same decoder where mathematically applicable; if decoders differ, disclose their effect and run a shared small reference (or near-optimal comparison). Relay-BP/MLE are paper references, not automatically implemented by using Stim. Avoid naive matching on non-graphlike hyperedges.
-- No cherry-picking or postselection without acceptance probability and conditionality. Keep loss-free replication and extensions in separate tables/figures.
-
-## Expected figures (not yet generated)
-
-1. Architecture schematic and memory footprint versus logical capacity (include whole-block rounding).
-2. Logical failure probability versus physical two-qubit/idle error, with confidence intervals (depends on simulator teammate).
-3. Time/space sensitivity or break-even curve versus cycle ratio and factory count (depends on algorithm/decoder inputs).
-4. Table of hardware assumptions with units and evidence labels.
+Rules applied to every sampled experiment: one sample per shot (failure = any observable wrong);
+95% Wilson intervals; a stopping rule fixed in advance (100 failures or the shot cap); seeds derived
+from the circuit hash; the full configuration stored with each result. Raw detector rates are never
+reported as logical error rates.
