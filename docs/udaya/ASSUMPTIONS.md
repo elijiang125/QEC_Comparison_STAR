@@ -98,13 +98,14 @@ scenarios` prints every scenario with its per-parameter evidence class.
 ## 5. Modeling choices that are ours
 
 - **`cycle_idle`**: a per-round depolarizing probability on qubits that wait through a measurement
-  moment. Not in the paper; zero in the baseline. It is the only place where cycle duration enters
-  the noise, so it is how a longer bicycle cycle can cost fidelity.
+  moment and are used again by a later entangling layer. Not in the paper; zero in the baseline. It
+  is the only place where cycle duration enters the noise, so it is how a longer bicycle cycle can
+  cost fidelity. An r-round memory gets it r − 1 times per data qubit in both architectures.
 - **Dephasing applied as depolarizing**: the T2-derived probability is a Z error, but we insert a
   depolarizing channel of the same total probability. This understates Z errors by a third and adds
   X errors that pure dephasing would not cause.
 - **Surface reference circuit**: Stim's generated rotated memory circuit prepares and measures X
   ancillas with H gates, which adds 80 one-qubit noise locations per round at d = 9. A circuit that
   prepares \|+> directly, as the paper describes, would not have them.
-- **Final-round boundary**: the Stim surface circuit measures data in the same moment as the last
-  ancilla readout, so it has one fewer `cycle_idle` round than the bicycle circuit.
+- **Atom counts in Eq. (32)**: the paper's 2 (Q_data + Q_magic) need not be an integer. We round one
+  instance up to a whole atom and then multiply by the number of parallel instances.

@@ -7,10 +7,11 @@ Branch `udaya`, based on `epa-branch` at `0dc22d9`. Primary paper:
 surface-code STAR once hardware overhead and non-uniform noise are considered?
 
 **Where things stand.** The noise model, timing model, scenario registry, resource accounting and
-experiment runner are implemented and tested. The analytic results are final. The sampled results are
-a pilot only: the one decoder available in the repository's dependencies is not good enough for the
-bicycle-chain circuit, so the paper's logical error rates are not reproduced. Details are in
-[RESULTS.md](RESULTS.md) and [VALIDATION.md](VALIDATION.md).
+experiment runner are implemented and tested. The analytic results (footprints, fault budgets,
+timing and break-even) are validated. The sampled results are provisional: a small fixed-shot run
+with a sound decoder gives upper bounds on the logical failure rate, not estimates, and the paper's
+logical error rates are not reproduced. Details are in [RESULTS.md](RESULTS.md) and
+[VALIDATION.md](VALIDATION.md); what is needed from teammates is in [HANDOFF.md](HANDOFF.md).
 
 ## Scope
 
@@ -23,14 +24,17 @@ matrices, syndrome schedules, decoders, the Hamiltonian compilation, or the non-
 ```sh
 python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install -e '.[dev]'
-python -m pytest -q                                   # 186 tests
+python -m pip install tesseract-decoder               # optional: the sound decoder (2 tests, `validate`)
+python -m pytest -q                                   # 203 tests
 python -m qec_star.hardware --logical-count 64        # memory footprint of both architectures
 python -m qec_star.hardware scenarios                 # the scenario registry, as JSON
-python -m qec_star.hardware pilot --out results/udaya/pilot.jsonl --workers 12
-python -m qec_star.hardware figures --pilot results/udaya/pilot.jsonl --out docs/udaya/figures
+python -m qec_star.hardware figures --out docs/udaya/figures
+python -m qec_star.hardware validate --out results/udaya/validation_tesseract.jsonl --workers 12
 ```
 
-The pilot takes roughly an hour on a 14-core laptop. The other commands take seconds.
+`validate` takes about 50 minutes on 12 cores and appends to its output file. The other commands
+take seconds. The notebook `docs/udaya/hardware_models.ipynb` walks through the models with
+editable parameters; it needs `jupyter`.
 
 ## Layout
 
@@ -40,11 +44,12 @@ The pilot takes roughly an hour on a 14-core laptop. The other commands take sec
 | `src/qec_star/hardware/noise.py` | `decorate_stim_memory`: adds noise to a noiseless Stim circuit; `noise_census` |
 | `src/qec_star/hardware/scenarios.py` | versioned registry of noise and timing scenarios with provenance |
 | `src/qec_star/hardware/resources.py` | exact block accounting; the paper's Eqs. (32)-(33) |
-| `src/qec_star/hardware/experiments.py` | deterministic pilot runner, statistics, decoder acceptance check |
+| `src/qec_star/hardware/experiments.py` | fixed-shot runner, statistics, provenance, decoder acceptance check |
 | `src/qec_star/hardware/figures.py` | figures from recorded data |
-| `tests/test_udaya_*.py` | 118 tests |
-| `results/udaya/pilot.jsonl` | raw pilot records, one JSON object per cell |
-| `docs/udaya/figures/` | figures and `analytic.json` |
+| `tests/test_udaya_*.py` | 135 tests |
+| `results/udaya/` | raw sampling records and a README describing them |
+| `docs/udaya/figures/` | five figures and `analytic.json` |
+| `docs/udaya/hardware_models.ipynb` | executed demonstration notebook |
 
 ## Documents
 
@@ -55,6 +60,7 @@ The pilot takes roughly an hour on a 14-core laptop. The other commands take sec
 | [ASSUMPTIONS.md](ASSUMPTIONS.md) | every parameter with its source and evidence class |
 | [VALIDATION.md](VALIDATION.md) | what was tested and how; the decoder check |
 | [INTEGRATION.md](INTEGRATION.md) | interfaces, circuit requirements, dependencies on teammates |
+| [HANDOFF.md](HANDOFF.md) | what each teammate can use now and what is needed from them |
 | [ROADMAP.md](ROADMAP.md) | status, remaining work and acceptance criteria |
 
 ## Working rules

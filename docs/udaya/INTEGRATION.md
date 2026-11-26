@@ -46,7 +46,7 @@ The team's `memory_experiment` and Stim's generated surface-code circuits both s
 |---|---|---|---|
 | Noiseless bicycle-chain memory circuit | QEC (Epameinondas) | available (`circuits.py`) | all bicycle results |
 | Noiseless surface-code memory circuit with the same conventions | surface baseline (Harman) | **missing**; Stim's generated circuit is a labeled stand-in (`surface_reference`) | all surface results |
-| A decoder that passes the low-weight fault check on the bicycle circuit | simulation owner | **missing**; BP+OSD from `ldpc` fails it (see VALIDATION.md) | any logical error rate worth quoting |
+| A decoder that passes the low-weight fault check on the bicycle circuit, at production speed | simulation owner | **partly**: Tesseract passes the check but costs about 1 CPU-second per shot at 18 rounds; BP+OSD-0 from `ldpc` fails the check (see VALIDATION.md) | any logical error rate worth quoting |
 | Transversal-gate and magic-state circuits | QEC | missing | noise beyond memory |
 | Logical qubit count, V_RZ, V_Cliff, factory count and size, error budget | Hamiltonian / algorithm owner | missing | end-to-end resources with Eqs. (32)-(33) |
 | Logical error rate per round at matched conditions | simulation owner | missing | a fair space-time comparison |
@@ -56,8 +56,8 @@ The team's `memory_experiment` and Stim's generated surface-code circuits both s
 | For | Object | Notes |
 |---|---|---|
 | Simulation owner | `decorate_stim_memory`, `SCENARIOS`, `noise_census`, `expected_faults` | scenario id and registry version go into every record |
-| Simulation owner | `experiments.low_weight_fault_failures` | deterministic acceptance test for a decoder |
-| Simulation owner | `experiments.run_cell` / `run_grid` | pilot-scale runner with seeds and provenance; replaceable by the real pipeline |
+| Simulation owner | `experiments.low_weight_fault_failures`, `dem_logical_collisions` | acceptance test for a decoder; guard against merged logical effects |
+| Simulation owner | `experiments.run_cell` / `run_grid` | small fixed-shot runner with seeds and provenance; replaceable by the real pipeline |
 | Algorithm owner | `star_resources`, `star_data_qubits` | paper Eqs. (32)-(33); you supply volumes and factories |
 | Everyone | `allocate`, `memory_footprint`, `CycleTiming` | exact atom counts and cycle-time budgets |
 
@@ -65,9 +65,13 @@ The team's `memory_experiment` and Stim's generated surface-code circuits both s
 
 `run_grid` appends one JSON object per line. Fields: `experiment`, `architecture`, `code`, `basis`,
 `rounds`, `scenario_id`, `registry_version`, `noise`, `noise_locations`, `num_detectors`,
-`num_observables`, `circuit_sha256`, `decoder`, `stop_rule`, `shots`, `failures`,
+`num_observables`, `circuit_sha256`, `decoder`, `design`, `sampling_plan`, `shots`, `failures`,
 `shot_failure_rate`, `wilson95`, `per_observable_failures`, `chunks` (seed, shots, failures each),
-`runtime_seconds`, `source_commit`, `versions`.
+`runtime_seconds`, `code_revision`, `versions`.
+
+`code_revision.source_tree` is git's hash of the committed `src/qec_star` directory. It identifies
+the simulation code and does not change when only documentation is committed. To check out the code
+that produced a record, use its `code_revision.commit`.
 
 A shot fails if any logical observable is predicted wrongly. `per_observable_failures` is descriptive
 only: the observables of one block are correlated and are not independent samples.
@@ -76,5 +80,5 @@ only: the observables of one block are correlated and are not independent sample
 
 1. Which branch is the integration target? `udaya` is based on `epa-branch` at `0dc22d9`.
 2. Will the surface-code circuit prepare and measure X ancillas directly (`RX`/`MX`) or through H gates? This changes its noise count by 80 locations per round at d = 9.
-3. Which decoder will the simulation pipeline use for the bicycle code (relay-BP, BP+OSD with stronger settings, an MLE solver)?
+3. Which decoder will the simulation pipeline use for the bicycle code (relay-BP, Tesseract, BP+OSD with stronger settings, an MLE solver)?
 4. Should the comparison keep the paper's pairing (surface d = 9 against bicycle d = 6), or match logical error rates first?

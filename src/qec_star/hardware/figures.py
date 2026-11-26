@@ -132,7 +132,7 @@ def _fig_timing(plt, t, out):
                    label=f"{n} logical qubits (break-even at {star:.3g})")
     right.axhline(1, color=INK, linewidth=1)
     right.axvline(2, color=MUTED, linewidth=1, linestyle=":")
-    right.annotate("paper cycle ratio", (2, 9), (2.4, 9), color=MUTED, fontsize=8)
+    right.annotate("paper cycle ratio", (2, 0.5), (2.3, 0.5), color=MUTED, fontsize=8)
     right.set_yscale("log")
     _axes(right, "bicycle / surface cycle time", "surface / bicycle qubit-seconds per round",
           "Memory space-time ratio (above 1: bicycle cheaper)")

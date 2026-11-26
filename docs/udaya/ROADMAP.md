@@ -1,60 +1,49 @@
 # Roadmap and status
 
-Target: about one-fifth of a five-person project. Status as of 25 November 2026.
+Target: about one-fifth of a five-person project. Status as of 25 November 2026. A milestone is
+marked done only if its artifacts are committed on `udaya`.
 
 ## Milestones
 
-| # | Milestone | Status | Acceptance criterion | Met? |
+| # | Milestone | Status | Acceptance criterion | Evidence |
 |---|---|---|---|---|
-| 1 | Branch and starter integrated | done | `udaya` pushed; patch and ZIP verified identical; teammates' tests pass | yes |
-| 2 | Faithful loss-free noise model | done | every channel matches paper Sec. III; exact location counts match hand counts on both circuits; zero-noise identity; records preserved in X and Z bases | yes |
-| 3 | Scenario registry with provenance | done | immutable reference; every parameter labeled measured / assumed / derived / synthetic | yes |
-| 4 | Timing model | done | reproduces 1 ms and 2 ms; parallel layers counted once; fixed and per-layer time separated | yes |
-| 5 | Resource accounting | done | Table 4 footprints reproduced; whole-block rounding; Eqs. (32)-(33) verified by hand | yes |
-| 6 | Sensitivity experiments | pilot only | decoder passes the low-weight fault check; ≥ 100 failures or a stated bound per cell; both architectures on team circuits | **no**: decoder fails the check; surface circuit is a stand-in |
-| 7 | Figures and analysis | partly | every figure regenerated from recorded data by one command | yes for 5 figures; pilot figures are labeled as such |
-| 8 | Documentation | done | README, research notes, assumptions, validation, integration, results | yes |
-| 9 | Atom loss (optional) | not started | loss-aware circuit semantics and a decoder validated on a toy case | no |
-
-## What is finished
-
-- Noise adapter for any TICK-delimited noiseless Stim circuit, with tagged channels and an audit count.
-- Paper baseline scenario and 22 exploratory scenarios.
-- Cycle-time model, memory break-even analysis, exact allocation.
-- Deterministic pilot runner and a decoder acceptance test.
-- Five figures and their underlying tables.
-- 118 tests; the 68 pre-existing tests are untouched and pass.
+| 1 | Branch and starter integrated | done | `udaya` pushed; patch and ZIP identical; teammates' tests pass | commit `e62ee2f` |
+| 2 | Faithful loss-free noise model | done | every channel matches paper Sec. III; exact location counts match hand counts on both circuits; zero-noise identity; records preserved in both bases | `noise.py`, `tests/test_udaya_noise.py` |
+| 3 | Scenario registry with provenance | done | immutable reference; every parameter labeled measured / assumed / derived / synthetic | `scenarios.py`, ASSUMPTIONS.md |
+| 4 | Timing model | done | reproduces 1 ms and 2 ms; parallel layers counted once; fixed and per-layer time separated | `models.py`, RESULTS.md A3 |
+| 5 | Resource accounting | done for memory; formulas only for end-to-end | Table 4 footprints reproduced; whole-block rounding; Eqs. (32)-(33) verified by hand | `resources.py`, RESULTS.md A1 |
+| 6 | Sensitivity analysis | **partly** | (a) fault budget per scenario, exact; (b) decoder-backed logical error per scenario with ≥ 100 failures or a stated bound | (a) done: RESULTS.md A2, A4. (b) **not done**: only the baseline and one elevated-noise point were sampled, giving bounds |
+| 7 | Figures | done for the analytic set | regenerated from recorded data by one command | `docs/udaya/figures/` (4 analytic, 1 provisional) |
+| 8 | Documentation, notebook, handoff | done | each claim backed by a committed file | `docs/udaya/` |
+| 9 | Reproduction of the paper's logical error rates | **not done** | failure rates with intervals that resolve the paper's values, with its decoders or equivalent | needs cluster-scale sampling |
+| 10 | End-to-end resource comparison | **not done** | paper's 1,904 to 3,584 atom range reproduced or the gap explained | needs algorithm volumes |
+| 11 | Atom loss (optional) | not started | loss-aware circuit semantics and a decoder validated on a toy case | |
 
 ## What remains, in priority order
 
-1. **A decoder that passes the acceptance check** (simulation owner, or relay-BP if we can obtain an
-   implementation). Until then no logical error rate from this repository should be quoted as a
-   property of either code. *Done when:* `low_weight_fault_failures` returns 0 for weights 1 and 2 on
-   the [[42,6,6]] circuit and the p-scaling of the failure rate is consistent with fault distance 5.
+1. **Production sampling with a sound decoder** (simulation owner). Baseline in both bases to ≥ 100
+   failures per cell, then the one-channel, idle and literature-anchored scenarios. *Done when:* each
+   cell has ≥ 100 failures or a stated bound, the decoder passes the acceptance check, and its
+   low-confidence events are recorded.
 2. **The team's surface-code circuit** (Harman) in place of Stim's generated one. *Done when:* the
-   noise-location test is updated to its structure and E1 is rerun.
-3. **Rerun E1-E5 at production scale** with the two items above. *Done when:* each cell has ≥ 100
-   failures or a stated upper bound, in both bases.
-4. **Matched-reliability comparison.** Choose the surface distance whose logical error matches the
-   bicycle code's, then compare space-time cost. *Done when:* the comparison quotes both error rates
-   with intervals.
-5. **End-to-end resources** from Eqs. (32)-(33) with the algorithm owner's volumes and factory
-   counts. *Done when:* the paper's 1,904 to 3,584 qubit range is reproduced or the gap is explained.
-6. **Timing with sourced durations.** Replace the lumped 0.25 ms per layer with gate, move, readout
+   noise-location test is updated to its structure and the baseline is rerun.
+3. **Matched-reliability comparison.** Choose the surface distance whose logical error matches the
+   bicycle code's, then compare space-time cost. *Done when:* both error rates are quoted with intervals.
+4. **End-to-end resources** from Eqs. (32)-(33) with the algorithm owner's volumes and factory
+   counts. *Done when:* milestone 10's criterion is met.
+5. **Timing with sourced durations.** Replace the lumped 0.25 ms per layer with gate, move, readout
    and reset times for a specific layout, including the longer moves of the bicycle schedule.
    *Done when:* each duration has an entry in ASSUMPTIONS.md.
-7. **Biased and loss noise** (optional). Z-biased idle and CZ channels; heralded loss.
+6. **Biased and loss noise** (optional). Z-biased idle and CZ channels; heralded loss.
 
-## Dependencies
-
-See INTEGRATION.md for the full table. In short: a surface circuit (Harman), a decoder and production
-sampling (simulation owner), algorithm volumes (Hamiltonian owner), transversal-gate and magic-state
-circuits (QEC).
+Items 1 to 4 depend on teammates (HANDOFF.md). Items 5 and 6 I can do alone; 5 needs a trap layout
+to be agreed.
 
 ## Known limitations
 
 - Memory experiments only. No transversal gates, no magic-state preparation, no rotations.
 - Pauli noise only. No loss, leakage, crosstalk or coherent error.
+- Sampled results are bounds from a few thousand shots with a decoder that is not the paper's.
 - The surface results use Stim's circuit, which has H gates that a direct \|+> preparation would not.
 - Cycle times are the paper's assumptions; measured rounds are currently about 4.5 times longer.
 - The architectures are compared at the paper's code distances, not at equal logical error.

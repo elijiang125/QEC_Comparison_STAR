@@ -83,7 +83,8 @@ Each entry was checked against Crossref or arXiv metadata, and numbers against t
 | Xu et al., *Constant-Overhead Fault-Tolerant Quantum Computation with Reconfigurable Atom Arrays*, arXiv:2308.08648 | A worked timing model for qLDPC codes with atom rearrangement: 24 ms per stabilizer round for a 10⁴-qubit hypergraph-product code | Assumed parameters; a different code family with long-range moves |
 | Zhou et al., arXiv:2505.15907 | Source of the common 1 ms cycle assumption (500 µs move pipelined with 500 µs measurement) | Assumed |
 | Perrin, Jandura, Pupillo, *Quantum Error Correction resilient against Atom Loss*, Quantum 9, 1884 (2025) | Loss-aware decoding of the surface code; loss threshold about 2.6% | Surface code only; independent loss per CZ. Does not transfer to the bicycle chain without new work |
-| Müller et al., arXiv:2506.01779 (relay-BP); Wu et al., arXiv:2508.04969 (MWPF) | The decoders the paper relies on | Neither is available in this repository's dependencies |
+| Müller et al., arXiv:2506.01779 (relay-BP); Wu et al., arXiv:2508.04969 (MWPF) | The decoders the paper relies on | Neither is in this repository's dependencies; see VALIDATION.md for availability |
+| Beni, Higgott, Shutty, *Tesseract: A Search-Based Decoder for Quantum Error Correction*, arXiv:2503.10988 | The decoder we used: a search for the most likely error, exact with an unbounded search and a heuristic otherwise; reported one to two orders of magnitude below BP+OSD on bicycle-code memories | Published as development builds only; we used its default finite beam |
 | Gidney, *Stim*, Quantum 5, 497 (2021) | Exact semantics of `DEPOLARIZE1/2` and `M(p)` | Clifford only: cannot simulate the arbitrary-angle rotation gadget |
 | Wu et al., Nat. Commun. 13, 4657 (2022); Ma et al., Nature 622, 279 (2023); Scholl et al., Nature 622, 273 (2023) | Erasure conversion: what fraction of errors can be heralded | Yb and Sr platforms, not the Rb-87 platform assumed here |
 
@@ -105,15 +106,18 @@ Each entry was checked against Crossref or arXiv metadata, and numbers against t
 
 | ID | What varies | What is held | Output | Status |
 |---|---|---|---|---|
-| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | pilot run; decoder-limited |
-| E2 | uniform p ∈ {5e-4, 1e-3, 2e-3} | everything else | failure vs p | pilot run; decoder-limited |
-| E3 | two-qubit error × {0.5, 2, 4} | other channels at 1e-3 | relative failure | pilot run |
-| E4 | measurement, idle × {0.5, 2, 4}; literature-anchored profile | other channels at 1e-3 | relative failure | pilot run |
-| E5 | cycle ratio; T2-derived per-round idle | paper noise | break-even curves; failure with idle | analytic done; pilot run |
+| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | sampled with a sound decoder: upper bounds only |
+| E2 | uniform p | everything else | failure vs p | one point (2e-3, Z basis) sampled; bounds only |
+| E3 | two-qubit error × {0.5, 2, 4} | other channels at 1e-3 | fault budget; relative failure | fault budget done (exact); sampling not run |
+| E4 | measurement, idle × {0.5, 2, 4}; literature-anchored profile | other channels at 1e-3 | fault budget; relative failure | fault budget done (exact); sampling not run |
+| E5 | cycle ratio; T2-derived per-round idle | paper noise | break-even curves; fault budget | done (analytic); sampling not run |
 | E6 | logical qubit count, block size | exact counting | physical qubits | done (analytic) |
 | E7 | heralded loss | | | not started; needs loss-aware circuits and a decoder |
 
+Sampling for E3-E5 needs 10⁵ to 10⁶ shots per cell at about 1 CPU-second per shot and is handed to
+the simulation owner (HANDOFF.md).
+
 Rules applied to every sampled experiment: one sample per shot (failure = any observable wrong);
-95% Wilson intervals; a stopping rule fixed in advance (100 failures or the shot cap); seeds derived
-from the circuit hash; the full configuration stored with each result. Raw detector rates are never
-reported as logical error rates.
+a shot count fixed before sampling; 95% Wilson intervals; seeds derived from the circuit hash; the
+full configuration and code revision stored with each result. Raw detector rates are never reported
+as logical error rates.
