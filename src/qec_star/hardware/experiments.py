@@ -32,10 +32,13 @@ from .scenarios import REGISTRY_VERSION, SCENARIOS
 # Decoder configurations, by name. Neither is the paper's (relay-BP and MLE for
 # the bicycle chain, MWPF for the surface code).
 #   tesseract: Google's search-based most-likely-error decoder; optional
-#              dependency (`pip install tesseract-decoder`). Passes the
-#              low-weight fault check on the bicycle circuit.
-#   bposd0:    BP + OSD-0 from `ldpc`, a project dependency. FAILS that check;
-#              kept so the failure can be reproduced. See docs/udaya/VALIDATION.md.
+#              dependency (`pip install tesseract-decoder`). A heuristic at
+#              this finite beam. Mis-corrected none of the sampled low-weight
+#              faults on the bicycle circuit.
+#   bposd0:    BP + OSD-0 from `ldpc`, a project dependency. Mis-corrects
+#              some double faults that Tesseract corrects, and gives failure
+#              rates about 100x higher; kept so this can be reproduced.
+#              See docs/udaya/VALIDATION.md.
 DECODERS = {
     "tesseract": {"name": "tesseract", "det_beam": 5, "pqlimit": 200_000},
     "bposd0": {"name": "bposd0", "max_iter": 30, "bp_method": "ms", "ms_scaling_factor": 0.625,
@@ -53,11 +56,23 @@ def dem_logical_collisions(dem) -> int:
     effects = {}
     for op in dem.flattened():
         if op.type == "error":
-            targets = op.targets_copy()
-            dets = frozenset(t.val for t in targets if t.is_relative_detector_id())
-            obs = frozenset(t.val for t in targets if t.is_logical_observable_id())
+            dets, obs = _parity_effect(op.targets_copy())
             effects.setdefault(dets, set()).add(obs)
     return sum(len(v) > 1 for v in effects.values())
+
+
+def _parity_effect(targets):
+    """(detectors, observables) flipped an odd number of times by one mechanism.
+
+    A decomposed mechanism such as `D0 ^ D0 L0` repeats targets; repeats cancel.
+    """
+    dets, obs = set(), set()
+    for t in targets:
+        if t.is_relative_detector_id():
+            dets ^= {t.val}
+        elif t.is_logical_observable_id():
+            obs ^= {t.val}
+    return frozenset(dets), frozenset(obs)
 
 
 def predictor(circuit, decoder: dict):
@@ -88,17 +103,24 @@ def predictor(circuit, decoder: dict):
 
 def low_weight_fault_failures(circuit, weight: int, samples: int, *, seed: int = 0,
                               decoder: dict = DECODERS["tesseract"]) -> int:
-    """How many random weight-`weight` fault sets the decoder gets wrong.
+    """How many random weight-`weight` fault sets the decoder mis-corrects.
 
     Picks `samples` random sets of `weight` distinct error mechanisms from the
     circuit's detector error model, decodes their combined detection events,
-    and counts wrong logical predictions. For a circuit of fault distance d, a
-    sound decoder returns 0 for every weight <= (d-1)/2. This is an acceptance
-    test for a decoder that does not depend on Monte Carlo statistics. It
-    samples fault sets, so passing it is necessary, not sufficient.
+    and counts wrong logical predictions.
+
+    This is a diagnostic, not a proof. In a circuit of fault distance d, a
+    minimum-WEIGHT decoder corrects every set of at most (d-1)/2 faults. A
+    most-LIKELY-error decoder need not: when error probabilities differ, a
+    rare single fault can be less likely than two common ones with the same
+    detection events. So a nonzero count is suspicious rather than conclusive,
+    and it is most informative as a comparison of decoders on identical
+    samples. Zero on a sample does not certify a decoder either.
     """
+    if type(weight) is not int or weight < 1 or type(samples) is not int or samples < 1:
+        raise ValueError("weight and samples must be positive integers")
     dem = circuit.detector_error_model(decompose_errors=False)
-    errors = [op.targets_copy() for op in dem.flattened() if op.type == "error"]
+    errors = [_parity_effect(op.targets_copy()) for op in dem.flattened() if op.type == "error"]
     predict = predictor(circuit, decoder)
     rng = np.random.default_rng(seed)
     failures = 0
@@ -106,11 +128,8 @@ def low_weight_fault_failures(circuit, weight: int, samples: int, *, seed: int =
         dets = np.zeros(dem.num_detectors, dtype=np.uint8)
         obs = np.zeros(dem.num_observables, dtype=np.uint8)
         for i in rng.choice(len(errors), weight, replace=False):
-            for t in errors[i]:
-                if t.is_relative_detector_id():
-                    dets[t.val] ^= 1
-                elif t.is_logical_observable_id():
-                    obs[t.val] ^= 1
+            dets[list(errors[i][0])] ^= 1
+            obs[list(errors[i][1])] ^= 1
         failures += bool((predict(dets) != obs).any())
     return failures
 
@@ -149,9 +168,10 @@ class Cell:
 def wilson_interval(failures: int, shots: int, z: float = 1.959963984540054):
     """Wilson score interval for a binomial proportion (95% by default).
 
-    Valid when `shots` was fixed before sampling. If sampling stopped because
-    a failure count was reached, the estimate is biased and this interval
-    under-covers; label such data accordingly.
+    An approximate interval for a shot count fixed before sampling; its true
+    coverage can fall below 95% when the expected number of failures is well
+    under one. If sampling stopped because a failure count was reached, the
+    estimate is biased as well; label such data accordingly.
     """
     if shots <= 0 or not 0 <= failures <= shots:
         raise ValueError("need 0 <= failures <= shots and shots > 0")
@@ -172,6 +192,8 @@ def per_round_rate(shot_failure: float, rounds: int) -> float:
     """
     if not 0 <= shot_failure < 0.5:
         raise ValueError("shot_failure must be in [0, 0.5)")
+    if type(rounds) is not int or rounds < 1:
+        raise ValueError("rounds must be a positive integer")
     return (1 - (1 - 2*shot_failure) ** (1/rounds)) / 2
 
 
@@ -190,22 +212,38 @@ def _git(*args) -> str:
                           text=True, check=True).stdout.strip()
 
 
+def _package_sha256() -> str:
+    """SHA-256 over the package's .py files as they are on disk right now."""
+    package = Path(__file__).parent.parent
+    digest = hashlib.sha256()
+    for path in sorted(package.rglob("*.py")):
+        digest.update(path.relative_to(package).as_posix().encode() + b"\0" + path.read_bytes())
+    return digest.hexdigest()
+
+
+# Taken when this module is imported, i.e. when the code that will run is loaded.
+LOADED_SOURCE_SHA256 = _package_sha256()
+
+
 def code_revision() -> dict:
     """Identify the simulation code, independently of documentation commits.
 
     source_tree is git's hash of the committed `src/qec_star` directory: it
     changes only when the package changes, so results from different commits
     with the same source_tree were produced by identical code. `dirty` is true
-    if the package has uncommitted changes (then source_tree does not describe
-    what ran).
+    if the package has uncommitted changes. Git describes what is committed,
+    not what Python loaded, so loaded_source_sha256 hashes the package files
+    as they were at import; it identifies the code even in a dirty checkout or
+    if the checkout changed after import.
     """
     try:
         package = Path(__file__).parent.parent
         prefix = _git("rev-parse", "--show-prefix").removesuffix("hardware/").rstrip("/")
-        return {"commit": _git("rev-parse", "HEAD"), "source_tree": _git("rev-parse", f"HEAD:{prefix}"),
-                "dirty": bool(_git("status", "--porcelain", "--", str(package)))}
+        git = {"commit": _git("rev-parse", "HEAD"), "source_tree": _git("rev-parse", f"HEAD:{prefix}"),
+               "dirty": bool(_git("status", "--porcelain", "--", str(package)))}
     except (OSError, subprocess.CalledProcessError):
-        return {"commit": "unknown", "source_tree": "unknown", "dirty": None}
+        git = {"commit": "unknown", "source_tree": "unknown", "dirty": None}
+    return {**git, "loaded_source_sha256": LOADED_SOURCE_SHA256}
 
 
 def _versions() -> dict:
@@ -244,6 +282,7 @@ class SamplingPlan:
 def run_cell(cell: Cell, plan: SamplingPlan = SamplingPlan(), *, pool=None,
              decoder: dict = DECODERS["tesseract"]) -> dict:
     """Sample exactly plan.shots shots of one cell and return a self-describing record."""
+    revision = code_revision()          # before sampling, so it describes what runs
     noisy = cell.noisy_circuit()
     text = str(noisy)
     digest = hashlib.sha256(text.encode()).hexdigest()
@@ -274,21 +313,26 @@ def run_cell(cell: Cell, plan: SamplingPlan = SamplingPlan(), *, pool=None,
         "chunks": [{"seed": seed, "shots": n, "failures": f}
                    for seed, n, (f, _) in zip(seeds, sizes, results)],
         "runtime_seconds": round(time.time() - start, 3),
-        "code_revision": code_revision(), "versions": _versions(),
+        "workers": plan.workers, "code_revision": revision, "versions": _versions(),
     }
 
 
 def run_grid(cells, out_path, plan: SamplingPlan = SamplingPlan(), *,
              decoder: dict = DECODERS["tesseract"], shots_for=None, progress: bool = False) -> list:
-    """Run cells in order, appending one JSON line per cell to out_path.
+    """Run cells in order, writing one JSON line per cell to a new file out_path.
 
     shots_for(cell) may return a shot count for that cell (fixed in advance,
     e.g. fewer shots for expensive circuits); otherwise plan.shots is used.
+    Refuses to add to an existing file: the seeds are deterministic, so a
+    second run would write the same trials again, and pooling them would
+    overstate the sample size.
     """
     out_path = Path(out_path)
+    if out_path.exists() and out_path.stat().st_size:
+        raise FileExistsError(f"{out_path} already holds results; write to a new file")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     records = []
-    with ProcessPoolExecutor(plan.workers) as pool, out_path.open("a") as fh:
+    with ProcessPoolExecutor(plan.workers) as pool, out_path.open("w") as fh:
         for cell in cells:
             shots = shots_for(cell) if shots_for else plan.shots
             cell_plan = SamplingPlan(shots, plan.chunk_shots, plan.workers, plan.seed)
@@ -307,12 +351,12 @@ def load_records(path) -> list:
 
 
 def validation_cells() -> list:
-    """A small grid that a laptop can decode soundly in under an hour.
+    """A small grid that a laptop can decode with Tesseract in under an hour.
 
     E1: the paper baseline (p = 1e-3, r = 3d rounds, both bases).
     E2: one elevated uniform noise level (p = 2e-3, Z basis).
     Channel-by-channel sweeps (E3-E5) need far more shots than this at the
-    failure rates a sound decoder gives, and are left to the production pipeline.
+    failure rates Tesseract gives, and are left to the production pipeline.
     """
     codes = [("bicycle", (3, 7), 18), ("surface_reference", (5,), 15),
              ("surface_reference", (7,), 21), ("surface_reference", (9,), 27)]

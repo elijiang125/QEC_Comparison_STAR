@@ -9,7 +9,7 @@ surface-code STAR once hardware overhead and non-uniform noise are considered?
 **Where things stand.** The noise model, timing model, scenario registry, resource accounting and
 experiment runner are implemented and tested. The analytic results (footprints, fault budgets,
 timing and break-even) are validated. The sampled results are provisional: a small fixed-shot run
-with a sound decoder gives upper bounds on the logical failure rate, not estimates, and the paper's
+with the Tesseract decoder gives upper bounds on the logical failure rate, not estimates, and the paper's
 logical error rates are not reproduced. Details are in [RESULTS.md](RESULTS.md) and
 [VALIDATION.md](VALIDATION.md); what is needed from teammates is in [HANDOFF.md](HANDOFF.md).
 
@@ -24,15 +24,16 @@ matrices, syndrome schedules, decoders, the Hamiltonian compilation, or the non-
 ```sh
 python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install -e '.[dev]'
-python -m pip install tesseract-decoder               # optional: the sound decoder (2 tests, `validate`)
-python -m pytest -q                                   # 203 tests
+python -m pip install tesseract-decoder               # optional decoder (2 tests and `validate` need it)
+python -m pytest -q                                   # 207 tests
 python -m qec_star.hardware --logical-count 64        # memory footprint of both architectures
 python -m qec_star.hardware scenarios                 # the scenario registry, as JSON
 python -m qec_star.hardware figures --out docs/udaya/figures
 python -m qec_star.hardware validate --out results/udaya/validation_tesseract.jsonl --workers 12
 ```
 
-`validate` takes about 50 minutes on 12 cores and appends to its output file. The other commands
+`validate` takes about 50 minutes on 12 cores and needs a new output file (it refuses to add to
+existing results). The other commands
 take seconds. The notebook `docs/udaya/hardware_models.ipynb` walks through the models with
 editable parameters; it needs `jupyter`.
 
@@ -44,9 +45,9 @@ editable parameters; it needs `jupyter`.
 | `src/qec_star/hardware/noise.py` | `decorate_stim_memory`: adds noise to a noiseless Stim circuit; `noise_census` |
 | `src/qec_star/hardware/scenarios.py` | versioned registry of noise and timing scenarios with provenance |
 | `src/qec_star/hardware/resources.py` | exact block accounting; the paper's Eqs. (32)-(33) |
-| `src/qec_star/hardware/experiments.py` | fixed-shot runner, statistics, provenance, decoder acceptance check |
+| `src/qec_star/hardware/experiments.py` | fixed-shot runner, statistics, provenance, low-weight fault check |
 | `src/qec_star/hardware/figures.py` | figures from recorded data |
-| `tests/test_udaya_*.py` | 135 tests |
+| `tests/test_udaya_*.py` | 145 tests |
 | `results/udaya/` | raw sampling records and a README describing them |
 | `docs/udaya/figures/` | five figures and `analytic.json` |
 | `docs/udaya/hardware_models.ipynb` | executed demonstration notebook |

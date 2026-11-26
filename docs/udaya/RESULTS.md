@@ -16,8 +16,9 @@ sampling records are in `results/udaya/`.
 On memory alone, the bicycle chain's space advantage is large and robust to timing: at the paper's
 code sizes it stores 64 logical qubits in 896 atoms against 10,304, and its syndrome cycle would have
 to be 11.5 times slower than the surface code's, not 2 times, before the qubit-seconds were equal.
-Realistic timing, in which readout takes a fixed time per round, moves the cycle ratio below 2 and
-so helps the bicycle chain.
+If some of a round's time does not scale with the number of gate layers (readout, for example), the
+cycle ratio falls below 2, which helps the bicycle chain; whether it does depends on how real
+hardware budgets that time, which the paper does not say.
 
 Non-uniform noise cuts the other way. The bicycle circuit's fault budget is 80% two-qubit gate error
 against 48% for the surface circuit, so a hardware profile dominated by the CZ gate raises its fault
@@ -64,8 +65,8 @@ Noise locations per logical qubit per syndrome round under the paper's model:
 - At p = 1e-3 this is 0.60 expected faults per logical qubit per round for the surface code and 0.07
   for the bicycle chain. Per millisecond, with 1 ms and 2 ms cycles, it is 0.60 against 0.035.
 - **The paper's idle channel never fires on the bicycle circuit.** All four atom arrays take part in
-  every CNOT layer. Scaling the idle probability changes nothing for the bicycle chain and adds 11%
-  per doubling for the surface code.
+  every CNOT layer. Scaling the idle probability changes nothing for the bicycle chain; doubling it adds 11%
+  to the surface code's fault budget.
 - The 80 one-qubit locations in the surface count come from H gates in Stim's circuit. A circuit
   that prepares and measures in the X basis directly would have 516 locations, not 596.
 - Fewer locations per logical qubit does not mean a lower logical error rate: the bicycle code has
@@ -75,11 +76,13 @@ Noise locations per logical qubit per syndrome round under the paper's model:
 
 ![timing](figures/fig3_timing_and_break_even.png)
 
-- The paper's cycle times are 0.25 ms × stabilizer weight for all three code families: no time is
-  allotted to anything that happens once per round.
-- With a fixed time F per round, the ratio is (F + 8 × 0.25 ms) / (F + 4 × 0.25 ms): 2.0 at F = 0,
-  1.67 at 0.5 ms (one mid-circuit imaging step as measured on hardware), 1.5 at 1 ms, 1.2 at 4 ms.
-  **The paper's ratio of 2 is the worst case of this model for the bicycle chain.**
+- The paper's cycle times are 0.25 ms × stabilizer weight for all three code families. The paper
+  does not break this down, so readout may be amortized into the per-layer figure or left out; we
+  cannot tell which.
+- As a sensitivity calculation, add a fixed time F per round on top of 0.25 ms per layer. The ratio
+  is (F + 8 × 0.25 ms) / (F + 4 × 0.25 ms): 2.0 at F = 0, 1.67 at 0.5 ms (the duration of one
+  mid-circuit imaging step measured on hardware), 1.5 at 1 ms, 1.2 at 4 ms. Within this model, 2 is
+  the largest ratio; any common fixed term lowers it.
 - The ratio can exceed 2 only if a bicycle layer takes longer than a surface layer. Its checks reach
   up to four sites away, and move time grows as the square root of distance, so this is possible;
   no layout has been specified to quantify it.
@@ -108,8 +111,10 @@ Expected faults per logical qubit per round, relative to the paper baseline:
 | per-round idle, T2 = 1.5 s (measured) | 1.05 | 1.07 |
 | per-round idle, T2 = 0.15 s (synthetic) | 1.45 | 1.66 |
 
-- The bicycle chain is the more sensitive of the two to two-qubit gate error and the less sensitive
-  to measurement and idle error.
+- The bicycle chain is the more sensitive of the two to two-qubit gate error, the less sensitive to
+  measurement error, and insensitive to the paper's gate-layer idle error. It is the more sensitive
+  to idle error that grows with cycle duration (1.07 against 1.05, and 1.66 against 1.45), because
+  its cycle is twice as long.
 - At the measured coherence time, idling through a 1 ms or 2 ms cycle adds 5% and 7% to the fault
   budgets. It becomes comparable to the gate error only if coherence is ten times worse or cycles
   ten times longer. The measured 4.45 ms round is partway there.
@@ -133,7 +138,7 @@ decode byte-identical circuits (equal SHA-256).
 | bicycle [[42,6,6]], Z | 1e-3 | 0 / 6,000 | ≤ 6.4e-4 | 166 / 2,400 = 6.9% |
 | bicycle [[42,6,6]], X | 1e-3 | 1 / 6,000 | 2.9e-5 to 9.4e-4 | 156 / 2,400 = 6.5% |
 | bicycle [[42,6,6]], Z | 2e-3 | 2 / 2,400 | 2.3e-4 to 3.0e-3 | 530 / 1,200 = 44% |
-| surface d = 5 | 1e-3 | 8 / 40,000 | 1.0e-4 to 4.0e-4 | 41 / 40,000 |
+| surface d = 5 | 1e-3 | 8 / 40,000 | 1.0e-4 to 3.9e-4 | 41 / 40,000 |
 | surface d = 7 | 1e-3 | 0 / 40,000 | ≤ 9.6e-5 | 2 / 40,000 |
 | surface d = 9 | 1e-3 | 0 / 40,000 | ≤ 9.6e-5 | 0 / 40,000 |
 | surface d = 5 | 2e-3 | 39 / 40,000 | 7.1e-4 to 1.3e-3 | 103 / 21,600 |
@@ -142,28 +147,32 @@ decode byte-identical circuits (equal SHA-256).
 
 What this supports:
 
-- BP+OSD-0 overstates the bicycle code's failure rate by about two orders of magnitude, and the
-  surface code's by about five times at d = 5. It also fails a deterministic acceptance check
-  (VALIDATION.md). Its numbers say nothing about the codes.
-- With a decoder that passes the check, the [[42,6,6]] memory's failure rate at the paper's noise
-  level is below 1e-3 per 18-round shot in both bases. Divided by 6 logical qubits and 18 rounds, as
-  the paper normalizes, the Z-basis bound is 6e-6 per logical qubit per round. The paper quotes scales
-  near 1e-7 for this code family. Our bound is consistent with that and is far too loose to confirm it.
+- On identical circuits, BP+OSD-0 gives a failure rate about two orders of magnitude above
+  Tesseract's for the bicycle code, and about five times above it for the surface code at d = 5. It
+  also mis-corrects sampled double faults that Tesseract corrects (VALIDATION.md). Its numbers
+  describe the decoder, not the codes.
+- With Tesseract, the [[42,6,6]] memory's failure rate at the paper's noise level is below 1e-3 per
+  18-round shot in both bases. Divided by 6 logical qubits and 18 rounds, which is the paper's
+  normalization of a block failure rate and not an error rate of any single logical qubit, the
+  Z-basis bound is 6e-6. The paper quotes scales near 1e-7 for this code family. Our bound is
+  consistent with that and far too loose to confirm it.
+- The pilot's intervals are nominal (it stopped on a failure count). The fixed-shot intervals are
+  Wilson intervals, which are approximate when very few failures are expected.
 
 What it does not support:
 
 - Any ranking of the bicycle code against surface d = 7 or d = 9: three of those cells saw no
   failures at p = 1e-3.
 - Any statement about sensitivity to individual noise channels. At these failure rates each cell
-  would need 10⁵ to 10⁶ shots; at 0.8 to 3 CPU-seconds per shot for the bicycle memory, that is a
-  cluster job.
+  would need 10⁵ to 10⁶ shots. The validation run spent 1.1 to 1.3 worker-seconds per shot on the
+  bicycle memory at p = 1e-3 and 5.2 at 2e-3 (recorded wall time × 12 workers), so that is a cluster job.
 - The single X-basis failure flipped five of the six logical observables at once. The observables of
   a block fail together, which is why they are not counted as independent samples.
 
 ### B2. What was not run
 
 The planned sweeps over one channel at a time, the idle scenarios and the literature-anchored
-profile were not sampled with a sound decoder. The 60-cell BP+OSD pilot was stopped after 19 cells
+profile were not sampled with Tesseract. The 60-cell BP+OSD pilot was stopped after 19 cells
 once the decoder was shown to be inadequate; its records are kept in
 `results/udaya/pilot_bposd0_sequential.jsonl` and described in `results/udaya/README.md`.
 
@@ -199,8 +208,9 @@ blocks. End-to-end resources use Eqs. (32)-(33) of Ref. [paper].
 For sampled experiments the number of shots per configuration was fixed before sampling. A shot is
 counted as failed if any logical observable is decoded incorrectly, and we report 95% Wilson score
 intervals for the failure probability per shot. Detection events were decoded with the Tesseract
-search decoder [Beni et al.], after checking that it corrects every randomly drawn set of one, two or
-three circuit faults in a sample of the detector error model.
+search decoder [Beni et al.] at a finite beam, for which it is a heuristic. As a diagnostic we drew
+random sets of one, two and three faults from the detector error model (300, 300 and 150 sets) and
+confirmed that it corrected all of them.
 
 ### Results
 

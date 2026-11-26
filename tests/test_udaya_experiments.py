@@ -32,6 +32,21 @@ def test_per_round_rate_inverts_the_parity_formula():
     assert per_round_rate(0, 5) == 0
     with pytest.raises(ValueError):
         per_round_rate(0.5, 5)
+    with pytest.raises(ValueError):
+        per_round_rate(0.1, -1)
+
+
+def test_per_round_rate_does_not_apply_to_block_failure():
+    """Two independent observables, each flipping with probability 0.1 per round, two rounds.
+
+    The "any observable" block rate is not a parity bit, so the helper gives
+    the wrong answer for it. It must only be given a single observable.
+    """
+    single = (1 - (1 - 2 * 0.1) ** 2) / 2                 # one observable after two rounds: 0.18
+    block_two_rounds = 1 - (1 - single) ** 2              # either observable wrong: 0.3276
+    block_one_round = 1 - (1 - 0.1) ** 2                  # 0.19
+    assert per_round_rate(single, 2) == pytest.approx(0.1)
+    assert per_round_rate(block_two_rounds, 2) == pytest.approx(0.2064, abs=1e-4) != pytest.approx(block_one_round)
 
 
 @pytest.mark.parametrize("arch,code,rounds", [("bicycle", (3, 7), 2), ("surface_reference", (3,), 3)])
@@ -61,7 +76,8 @@ def test_noiseless_run_never_fails_and_records_provenance():
     # Exactly the planned shots: three full chunks and one of 50.
     assert [c["shots"] for c in record["chunks"]] == [100, 100, 100, 50]
     assert len({c["seed"] for c in record["chunks"]}) == 4
-    assert set(record["code_revision"]) == {"commit", "source_tree", "dirty"}
+    assert set(record["code_revision"]) == {"commit", "source_tree", "dirty", "loaded_source_sha256"}
+    assert len(record["code_revision"]["loaded_source_sha256"]) == 64
     assert record["versions"]["stim"] and "tesseract-decoder" in record["versions"]
 
 
@@ -94,6 +110,32 @@ def test_runs_are_reproducible_and_seeds_differ_between_circuits(tmp_path):
     path = tmp_path / "out.jsonl"
     run_grid([noisy], path, SMALL, decoder=BPOSD)
     assert load_records(path)[0]["failures"] == first["failures"]
+    # A second run would repeat the same seeded trials, so it is refused.
+    with pytest.raises(FileExistsError):
+        run_grid([noisy], path, SMALL, decoder=BPOSD)
+
+
+def test_recorded_results_match_the_current_code():
+    """Every committed validation record regenerates to the same circuit and seeds."""
+    import hashlib
+    from pathlib import Path
+
+    import numpy as np
+    from qec_star.hardware.scenarios import SCENARIOS
+    path = Path(__file__).parent.parent / "results" / "udaya" / "validation_tesseract.jsonl"
+    records = load_records(path)
+    assert len(records) == 12 and len({r["circuit_sha256"] for r in records}) == 12
+    for r in records:
+        cell = Cell(r["experiment"], r["architecture"], tuple(r["code"]), r["basis"], r["rounds"],
+                    SCENARIOS[r["scenario_id"]].noise, r["scenario_id"])
+        digest = hashlib.sha256(str(cell.noisy_circuit()).encode()).hexdigest()
+        assert digest == r["circuit_sha256"]
+        plan = SamplingPlan(**r["sampling_plan"])
+        seeds = np.random.SeedSequence([plan.seed, int(digest[:16], 16)]).spawn(len(plan.chunk_sizes()))
+        assert [int(s.generate_state(1)[0]) for s in seeds] == [c["seed"] for c in r["chunks"]]
+        assert sum(c["failures"] for c in r["chunks"]) == r["failures"]
+        assert r["wilson95"] == pytest.approx(wilson_interval(r["failures"], r["shots"]))
+        assert r["design"] == "fixed_shots" and r["code_revision"]["dirty"] is False
 
 
 def test_code_revision_ignores_documentation(monkeypatch):
@@ -114,6 +156,9 @@ def test_merged_logical_effects_are_detected_and_refused():
     clash = stim.Circuit("R 0 1\nX_ERROR(0.01) 0\nX_ERROR(0.1) 1\nM 0 1\n"
                          "DETECTOR rec[-2] rec[-1]\nOBSERVABLE_INCLUDE(0) rec[-1]")
     assert dem_logical_collisions(clash.detector_error_model()) == 1
+    # Decomposed mechanisms repeat targets; the repeats cancel (D0 ^ D0 L0 flips only L0).
+    decomposed = stim.DetectorErrorModel("error(0.1) D0 ^ D0 L0\nerror(0.2) L1\ndetector D0")
+    assert dem_logical_collisions(decomposed) == 1
     for decoder in DECODERS.values():
         with pytest.raises(ValueError, match="different observables"):
             predictor(clash, decoder)
@@ -133,7 +178,7 @@ def test_unknown_decoder():
 
 
 def test_low_weight_fault_check_on_a_repetition_code():
-    """The acceptance check itself, on a circuit every decoder handles."""
+    """The low-weight fault check itself, on a circuit every decoder handles."""
     noisy = decorate_stim_memory(stim.Circuit.generated("repetition_code:memory", distance=5, rounds=3),
                                  NoiseProfile.paper())
     for decoder in DECODERS.values():
@@ -142,15 +187,17 @@ def test_low_weight_fault_check_on_a_repetition_code():
             == low_weight_fault_failures(noisy, weight=3, samples=50, seed=3, decoder=BPOSD))
 
 
-def test_tesseract_passes_the_acceptance_check_on_the_bicycle_circuit():
-    """Fault distance 5 means every pair of faults is correctable; Tesseract does so.
+def test_tesseract_corrects_sampled_low_weight_faults_on_the_bicycle_circuit():
+    """A regression check on the decoder we rely on, for a small fixed sample.
 
-    (BP+OSD-0 does not: see docs/udaya/VALIDATION.md. That is a property of
-    a third-party decoder, so it is recorded there rather than asserted.)
+    (BP+OSD-0 mis-corrects some of the same faults: see docs/udaya/VALIDATION.md.
+    That is a property of a third-party decoder, so it is recorded there.)
     """
     circuit = Cell("T", "bicycle", (3, 7), "Z", 3, NoiseProfile.paper()).noisy_circuit()
     assert low_weight_fault_failures(circuit, weight=1, samples=40) == 0
     assert low_weight_fault_failures(circuit, weight=2, samples=40) == 0
+    with pytest.raises(ValueError):
+        low_weight_fault_failures(circuit, weight=1, samples=-4)
 
 
 def test_validation_grid_is_well_formed():

@@ -159,8 +159,8 @@ def _fig_exposure(plt, t, out):
 
 def _fig_decoders(plt, results_dir, out):
     """Provisional: sampled failure per shot for the two decoders."""
-    files = {"BP+OSD-0 (fails acceptance check)": ("pilot_bposd0_sequential.jsonl", MUTED, "s"),
-             "Tesseract (passes acceptance check)": ("validation_tesseract.jsonl", ORANGE, "o")}
+    files = {"BP+OSD-0 (stopped on failure count; intervals nominal)": ("pilot_bposd0_sequential.jsonl", MUTED, "s"),
+             "Tesseract, beam 5 (fixed shots)": ("validation_tesseract.jsonl", ORANGE, "o")}
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.9), sharey=True)
     drawn = False
     for ax, (p, title) in zip(axes, ((1e-3, "p = 1e-3 (paper baseline)"), (2e-3, "p = 2e-3"))):
@@ -188,7 +188,7 @@ def _fig_decoders(plt, results_dir, out):
         ax.set_xticks(range(len(SAMPLED_CODES)), list(SAMPLED_CODES.values()), fontsize=8)
         _axes(ax, "", "failure probability per shot (3d rounds)" if p == 1e-3 else "", f"Z-basis memory, {title}")
     axes[1].legend(frameon=False, labelcolor=INK, fontsize=8)
-    fig.suptitle("PROVISIONAL. Not the paper's decoders; surface circuits are Stim stand-ins. 95% intervals; "
+    fig.suptitle("PROVISIONAL. Not the paper's decoders; surface circuits are Stim stand-ins. 95% Wilson intervals; "
                  "hollow triangles are upper bounds with zero failures.", fontsize=8, color=MUTED, x=0.01, ha="left")
     return _save(fig, out / "fig5_provisional_decoder_comparison.png") if drawn else None
 

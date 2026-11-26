@@ -37,14 +37,17 @@ however you like.** Store the scenario id and `REGISTRY_VERSION` with each resul
 
 Two things to do before trusting any logical error rate:
 
-1. Run `low_weight_fault_failures(noisy_circuit, weight, samples, decoder=...)` for weights 1 and 2.
-   A sound decoder returns 0. BP+OSD-0 from `ldpc` does not. Tesseract does, and so did BP+OSD with
-   literature settings (10,000 iterations, OSD-CS order 10) on a sample of 100 double faults, at
-   about 2 s per decode.
+1. Run `low_weight_fault_failures(noisy_circuit, weight, samples, decoder=...)` for weights 1 and 2
+   and compare decoders on it. It is a diagnostic, not a pass/fail proof: a most-likely-error decoder
+   can legitimately mis-correct a rare single fault. On our circuit BP+OSD-0 from `ldpc`
+   mis-corrected 8 of 300 double faults; Tesseract mis-corrected none, and neither did BP+OSD with
+   literature settings (10,000 iterations, OSD-CS order 10) on 100 double faults, at about 2 s per
+   decode. The sampled failure rates differ by about 100 times in the same direction.
 2. Check `dem_logical_collisions(dem) == 0` if your decoder merges error mechanisms by detector pattern.
 
-What we measured about cost, so you can plan compute: Tesseract takes about 0.8 CPU-seconds per shot
-on the 18-round [[42,6,6]] memory at p = 1e-3 and about 3 s at p = 2e-3. At the failure rates it
+What we measured about cost, so you can plan compute: on the 18-round [[42,6,6]] memory, the
+validation run spent 1.1 to 1.3 worker-seconds per shot at p = 1e-3 and 5.2 at p = 2e-3 with
+Tesseract (recorded wall time × 12 workers on a 14-core laptop). At the failure rates it
 gives (0 and 1 failures in 6,000 shots at p = 1e-3), resolving the paper baseline needs on the order
 of 10⁵ to 10⁶ shots per cell. That is a cluster job, not a laptop job.
 
@@ -92,7 +95,7 @@ times are assumptions. A measured neutral-atom QEC round currently takes about 4
 
 - Nothing outside `src/qec_star/hardware/`, `tests/test_udaya_*.py`, `docs/udaya/` and
   `results/udaya/` was changed. `pyproject.toml` is untouched.
-- Optional packages I used that are not in `pyproject.toml`: `tesseract-decoder` (the sound decoder)
+- Optional packages I used that are not in `pyproject.toml`: `tesseract-decoder` (the decoder used for the validation run)
   and `jupyter` (to run the notebook). If the team wants Tesseract as a declared dependency, it is a
   one-line addition for whoever owns `pyproject.toml`.
 - Please confirm the integration branch before I open a pull request. `udaya` is based on

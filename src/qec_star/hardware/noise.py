@@ -58,6 +58,7 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
     allocated = operated_qubits(flat) if active_qubits is None else _checked(active_qubits, flat)
     out = stim.Circuit()
     touched = set()                 # qubits used so far in the current moment
+    reused = False                  # some qubit was used twice in the current moment
     kinds = set()                   # which of "pair" / "measure" the moment contains
     # entangled_later[i]: qubits that some two-qubit gate after instruction i acts on.
     # Mid-circuit waiting only matters for qubits that are used again, so a
@@ -83,6 +84,8 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
             error("cycle_idle", sorted(untouched & entangled_later[index]))
         touched.clear()
         kinds.clear()
+        nonlocal reused
+        reused = False
 
     for index, op in enumerate(flat):
         name, targets, args = op.name, op.targets_copy(), op.gate_args_copy()
@@ -110,8 +113,10 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
         if kinds == {"pair", "measure"}:
             raise ValueError("a moment mixes two-qubit gates and measurements; insert TICK")
         # In an entangling layer every qubit may be used once, otherwise
-        # "idle during the layer" is not well defined.
-        if "pair" in kinds and touched.intersection(qs):
+        # "idle during the layer" is not well defined. The check does not
+        # depend on the order of the instructions within the layer.
+        reused = reused or bool(touched.intersection(qs))
+        if "pair" in kinds and reused:
             raise ValueError("overlapping operations in entangling moment; insert TICK")
         touched.update(qs)
 

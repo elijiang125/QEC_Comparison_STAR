@@ -41,8 +41,8 @@ One cyclic shift needs two moves with one AOD array, or one move with two.
 
 The bicycle architecture runs two instances side by side: twice the atoms, per-shot time t_run/2.
 
-**Headline claims.** For an 8×8 transverse-field Ising simulation: 1,904 to 3,584 qubits and 88 to
-116 s per shot at f = 0; "surface STAR achieves ε_gate = 0.46 (TFIM) and 0.84 (FH) at 5.5× and 5.7×
+**Headline claims.** For an 8×8 transverse-field Ising simulation: 1,904 to 3,584 qubits and 8 to
+116 s per shot at f = 0 (the arXiv HTML doubles some digits, see item 5 below; check the PDF); "surface STAR achieves ε_gate = 0.46 (TFIM) and 0.84 (FH) at 5.5× and 5.7×
 the qubit count". The abstract's 2,240 qubits and ~200 s per shot are at f = 0.7 and a longer
 simulated time. Reported logical error scales: transversal CNOT ~1e-7 per logical (bicycle, k = 8)
 against ~4e-6 (surface d = 9).
@@ -106,7 +106,7 @@ Each entry was checked against Crossref or arXiv metadata, and numbers against t
 
 | ID | What varies | What is held | Output | Status |
 |---|---|---|---|---|
-| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | sampled with a sound decoder: upper bounds only |
+| E1 | nothing (paper baseline) | p = 1e-3, r = 3d, both bases | failure per shot | sampled with Tesseract: upper bounds only |
 | E2 | uniform p | everything else | failure vs p | one point (2e-3, Z basis) sampled; bounds only |
 | E3 | two-qubit error × {0.5, 2, 4} | other channels at 1e-3 | fault budget; relative failure | fault budget done (exact); sampling not run |
 | E4 | measurement, idle × {0.5, 2, 4}; literature-anchored profile | other channels at 1e-3 | fault budget; relative failure | fault budget done (exact); sampling not run |
@@ -114,7 +114,7 @@ Each entry was checked against Crossref or arXiv metadata, and numbers against t
 | E6 | logical qubit count, block size | exact counting | physical qubits | done (analytic) |
 | E7 | heralded loss | | | not started; needs loss-aware circuits and a decoder |
 
-Sampling for E3-E5 needs 10⁵ to 10⁶ shots per cell at about 1 CPU-second per shot and is handed to
+Sampling for E3-E5 needs 10⁵ to 10⁶ shots per cell at roughly 1 to 5 worker-seconds per shot and is handed to
 the simulation owner (HANDOFF.md).
 
 Rules applied to every sampled experiment: one sample per shot (failure = any observable wrong);

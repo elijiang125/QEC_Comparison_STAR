@@ -74,7 +74,7 @@ Used only in the `lit/rb87_mixed` and `idle/t2_*` scenarios and in the discussio
 | Mid-circuit readout | about 99.8% fidelity, 500 µs imaging | measured | Bluvstein et al., Nature 626, 58 (2024), Methods and Fig. 1c |
 | Move between gates | about 200 µs; loss onset at 55 µm in 200 µs | measured / stated | Bluvstein et al., Nature 604, 451 (2022); Nature 626, 58 (2024) |
 | Coherence T2 | 1.5 s with XY16 (128 π pulses); 1 to 2 s in circuits | measured | Bluvstein 2022 Methods; 2024 and 2026 Methods |
-| Full QEC round | 4.45 ms (0.47 ms between gates, 2.57 ms moving ancillas); fastest cycle 4 ms | measured, "not optimized for speed" | Bluvstein et al. 2026, Methods |
+| Full QEC round | 4.45 ms (0.47 ms between gates, 2.57 ms moving ancillas). A 4 ms cycle is also reported, for repeated calibration, not for QEC | measured, "not optimized for speed" | Bluvstein et al. 2026, Methods |
 | Assumed QEC cycle in architecture papers | 1 ms | assumed | Zhou et al., arXiv:2505.15907; origin is an outlook estimate in Bluvstein 2022 |
 
 Not found in any source we opened (**unknown**): a measured fidelity per atom move, a measured idle
@@ -101,9 +101,10 @@ scenarios` prints every scenario with its per-parameter evidence class.
   moment and are used again by a later entangling layer. Not in the paper; zero in the baseline. It
   is the only place where cycle duration enters the noise, so it is how a longer bicycle cycle can
   cost fidelity. An r-round memory gets it r − 1 times per data qubit in both architectures.
-- **Dephasing applied as depolarizing**: the T2-derived probability is a Z error, but we insert a
-  depolarizing channel of the same total probability. This understates Z errors by a third and adds
-  X errors that pure dephasing would not cause.
+- **Dephasing applied as depolarizing**: the T2-derived probability p is a Z error, but we insert a
+  depolarizing channel of the same total probability. Its Z component is p/3; the errors that act as
+  phase flips (Z or Y) total 2p/3, one third less than p; and it adds bit-flip errors (X or Y, 2p/3)
+  that pure dephasing would not cause.
 - **Surface reference circuit**: Stim's generated rotated memory circuit prepares and measures X
   ancillas with H gates, which adds 80 one-qubit noise locations per round at d = 9. A circuit that
   prepares \|+> directly, as the paper describes, would not have them.

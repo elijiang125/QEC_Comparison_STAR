@@ -108,6 +108,8 @@ def test_multi_pair_gate_is_one_layer():
     ("R 0 0", "repeated target"),
     ("R 0\nM 0 0", "repeated target"),
     ("R 0 1\nTICK\nCX 0 1\nH 0", "overlapping"),
+    ("R 0 1 2\nTICK\nR 0\nH 0\nCX 1 2", "overlapping"),       # same layer, other order
+    ("R 0 1 2\nTICK\nCX 1 2\nR 0\nH 0", "overlapping"),
     ("R 0 1 2\nTICK\nCX 0 1\nM 2", "mixes two-qubit gates and measurements"),
 ])
 def test_rejects_unsupported_input(text, match):

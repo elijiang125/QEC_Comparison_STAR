@@ -46,7 +46,7 @@ The team's `memory_experiment` and Stim's generated surface-code circuits both s
 |---|---|---|---|
 | Noiseless bicycle-chain memory circuit | QEC (Epameinondas) | available (`circuits.py`) | all bicycle results |
 | Noiseless surface-code memory circuit with the same conventions | surface baseline (Harman) | **missing**; Stim's generated circuit is a labeled stand-in (`surface_reference`) | all surface results |
-| A decoder that passes the low-weight fault check on the bicycle circuit, at production speed | simulation owner | **partly**: Tesseract passes the check but costs about 1 CPU-second per shot at 18 rounds; BP+OSD-0 from `ldpc` fails the check (see VALIDATION.md) | any logical error rate worth quoting |
+| A decoder for the bicycle circuit that is accurate at production speed | simulation owner | **partly**: Tesseract works but costs 1 to 5 worker-seconds per shot at 18 rounds; BP+OSD-0 from `ldpc` is about 100 times worse (see VALIDATION.md) | any logical error rate worth quoting |
 | Transversal-gate and magic-state circuits | QEC | missing | noise beyond memory |
 | Logical qubit count, V_RZ, V_Cliff, factory count and size, error budget | Hamiltonian / algorithm owner | missing | end-to-end resources with Eqs. (32)-(33) |
 | Logical error rate per round at matched conditions | simulation owner | missing | a fair space-time comparison |
@@ -56,7 +56,7 @@ The team's `memory_experiment` and Stim's generated surface-code circuits both s
 | For | Object | Notes |
 |---|---|---|
 | Simulation owner | `decorate_stim_memory`, `SCENARIOS`, `noise_census`, `expected_faults` | scenario id and registry version go into every record |
-| Simulation owner | `experiments.low_weight_fault_failures`, `dem_logical_collisions` | acceptance test for a decoder; guard against merged logical effects |
+| Simulation owner | `experiments.low_weight_fault_failures`, `dem_logical_collisions` | diagnostic for comparing decoders; guard against merged logical effects |
 | Simulation owner | `experiments.run_cell` / `run_grid` | small fixed-shot runner with seeds and provenance; replaceable by the real pipeline |
 | Algorithm owner | `star_resources`, `star_data_qubits` | paper Eqs. (32)-(33); you supply volumes and factories |
 | Everyone | `allocate`, `memory_footprint`, `CycleTiming` | exact atom counts and cycle-time budgets |
