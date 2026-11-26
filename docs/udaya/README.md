@@ -27,7 +27,7 @@ the production simulations, the Hamiltonian compilation, or the non-Clifford sim
 python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install -e '.[dev]'
 python -m pip install tesseract-decoder               # optional decoder (2 tests and `validate` need it)
-python -m pytest -q                                   # 311 tests (add -m slow for one more)
+python -m pytest -q                                   # 316 pass, 4 explicit skips (add -m slow for one more)
 python -m qec_star.hardware --logical-count 64        # memory footprint of both architectures
 python -m qec_star.hardware scenarios                 # the scenario registry, as JSON
 python -m qec_star.hardware figures --out docs/udaya/figures
@@ -49,7 +49,7 @@ editable parameters; it needs `jupyter`.
 | `src/qec_star/hardware/resources.py` | exact block accounting; the paper's Eqs. (32)-(33) |
 | `src/qec_star/hardware/experiments.py` | fixed-shot runner, statistics, provenance, low-weight fault check |
 | `src/qec_star/hardware/figures.py` | figures from recorded data |
-| `tests/test_udaya_*.py` | 213 tests, 68 of them on the team's surface circuit |
+| `tests/test_udaya_*.py` | 222 tests, 76 of them on the team's surface circuit |
 | `src/qec_star/surface.py`, `tests/test_surface.py` | the surface-code owner's baseline, unchanged |
 | `results/udaya/` | raw sampling records and a README describing them |
 | `docs/udaya/figures/` | six figures and `analytic.json` |

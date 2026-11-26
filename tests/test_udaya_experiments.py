@@ -115,16 +115,21 @@ def test_runs_are_reproducible_and_seeds_differ_between_circuits(tmp_path):
         run_grid([noisy], path, SMALL, decoder=BPOSD)
 
 
-def test_recorded_results_match_the_current_code():
+@pytest.mark.parametrize("name,count,surface_kinds", [
+    ("validation_tesseract.jsonl", 12, {"surface_reference"}),                # before the team circuit
+    ("validation_surface_team_tesseract.jsonl", 15, {"surface", "surface_reference"}),
+])
+def test_recorded_results_match_the_current_code(name, count, surface_kinds):
     """Every committed validation record regenerates to the same circuit and seeds."""
     import hashlib
     from pathlib import Path
 
     import numpy as np
     from qec_star.hardware.scenarios import SCENARIOS
-    path = Path(__file__).parent.parent / "results" / "udaya" / "validation_tesseract.jsonl"
+    path = Path(__file__).parent.parent / "results" / "udaya" / name
     records = load_records(path)
-    assert len(records) == 12 and len({r["circuit_sha256"] for r in records}) == 12
+    assert len(records) == count and len({r["circuit_sha256"] for r in records}) == count
+    assert {r["architecture"] for r in records} - {"bicycle"} == surface_kinds
     for r in records:
         cell = Cell(r["experiment"], r["architecture"], tuple(r["code"]), r["basis"], r["rounds"],
                     SCENARIOS[r["scenario_id"]].noise, r["scenario_id"])

@@ -5,10 +5,11 @@ environment installed with `python -m pip install -e '.[dev]'` (Python 3.12, Sti
 
 ## Test suite
 
-`python -m pytest -q` runs 311 tests: the 62 that were on `epa-branch` (unchanged; one more is
+`python -m pytest -q` collects 320 tests: the 62 that were on `epa-branch` (unchanged; one more is
 marked slow and deselected by the project's settings), the 36 that came with the surface-code
-baseline (unchanged), and 213 for this workstream. All pass, and so does the slow test
-(`python -m pytest -q -m slow`). None is skipped. Nothing is skipped for a missing dependency; the two tests that use the
+baseline (unchanged), and 222 for this workstream. 316 pass and 4 are skipped on purpose: the
+hyperedge distance search is run at d = 3 and 5 only, and the test says so for d = 7 and 9. The slow
+test passes too (`python -m pytest -q -m slow`). Nothing is skipped for a missing dependency. Nothing is skipped for a missing dependency; the two tests that use the
 optional Tesseract decoder need `pip install tesseract-decoder`.
 
 | File | What it establishes |
@@ -17,7 +18,7 @@ optional Tesseract decoder need `pip install tesseract-decoder`.
 | `tests/test_udaya_hardware.py` | probability and timing validation; fidelity conversion; cycle formula by hand; block footprints against the paper's Table 4; whole-block rounding; break-even ratio; Eqs. (32)-(33) by hand; rounding of fractional inputs; latency versus throughput; the CLI |
 | `tests/test_udaya_scenarios.py` | the reference scenario equals the paper's values and cannot be mutated; every scenario labels every parameter; one-factor scenarios change exactly one channel |
 | `tests/test_udaya_surface.py` | the team's surface circuit at d = 3, 5, 7, 9 in both bases: structure (atoms, detectors, observables, 4 CNOT layers, no one-qubit gates); hand-derived noise-location counts; idle noise on exactly the untouched atoms; record preservation; full distance under the complete noise model; the expected differences from Stim's circuit; every registry scenario; both decoders |
-| `tests/test_udaya_experiments.py` | Wilson interval against known values; exact fixed shot counts; determinism under fixed seeds and any worker count; disjoint seeds for different circuits; provenance fields; refusal to append to an existing result file; refusal of detector error models with merged logical effects; the low-weight fault check; **every committed validation record regenerates to the same circuit hash and seeds** |
+| `tests/test_udaya_experiments.py` | Wilson interval against known values; exact fixed shot counts; determinism under fixed seeds and any worker count; disjoint seeds for different circuits; provenance fields; refusal to append to an existing result file; refusal of detector error models with merged logical effects; the low-weight fault check; **every record in both validation files (12 and 15) regenerates to the same circuit hash and seeds** |
 
 Expected values in these tests come from hand derivations written next to the assertion, not from
 running the implementation.
@@ -64,7 +65,8 @@ Independent checks at d = 3, 5, 7 and 9, in both bases (`tests/test_udaya_surfac
 | Noiseless circuit after decoration | identical to the input; no detector fires | yes |
 | Stripping the noise | returns the input circuit | yes |
 | Merged logical effects in the error model | 0 | 0 |
-| Shortest undetectable graph-like error under the full noise model | d | 3, 5, 7, 9 |
+| Shortest undetectable graph-like error under the full noise model | d | 3, 5, 7, 9 (ignores mechanisms that flip more than two detectors) |
+| Bounded search including those mechanisms, d = 3 and 5 | weight d, nothing lighter | 3, 5 in both bases |
 | Tesseract and BP+OSD accept the circuit | | yes; Tesseract mis-corrected none of 40 sampled single faults per distance |
 | All 23 registry scenarios apply | | yes |
 
@@ -97,7 +99,7 @@ fault sets, read together with sampled failure rates on the same circuits.
 Recorded in `results/udaya/decoder_low_weight_checks.jsonl` (seed 0 unless noted, p = 1e-3, Z basis;
 mis-corrected / tried):
 
-| Decoder | bicycle [[42,6,6]], 6 rounds, w = 1 | w = 2 | w = 3 | surface d = 3, w = 1 | surface d = 5, w = 2 | time per decode (bicycle) |
+| Decoder | bicycle [[42,6,6]], 6 rounds, w = 1 | w = 2 | w = 3 | Stim surface d = 3, w = 1 | Stim surface d = 5, w = 2 | time per decode (bicycle) |
 |---|---|---|---|---|---|---|
 | Tesseract (`det_beam=5`, `pqlimit=200000`) | 0 / 300 | 0 / 300 | 0 / 150 | 0 / 300 | 0 / 300 | ~0.1 s |
 | BP+OSD-0 (min-sum, 30 iterations) | 0 / 300 | **8 / 300** | **15 / 150** | **5 / 300** | 0 / 300 | ~0.03 s |
@@ -235,3 +237,22 @@ all 31 records and matched their circuit hashes, seeds, counts and intervals, ma
 | Re-running would append duplicate seeded trials | yes | `run_grid` refuses a non-empty file; test |
 | 8/40,000 upper bound rounds to 3.9e-4 | yes | corrected |
 | Missing input validation in two helpers | yes | added, with tests |
+
+Third review (integration of the surface-code baseline, at commit `b5ede9f`). It confirmed that the
+merge preserved both of the baseline's commits and that its two files are byte-identical to
+`origin/harman`; that no file outside this workstream differs from a merge parent; that the 31
+earlier records are untouched; that the noise-location counts equal its own closed forms
+(preparation and measurement d² + r(d² − 1), two-qubit 4rd(d − 1), idle r(8d − 4), per-round idle
+(r − 1)d², no one-qubit); that the circuit has distance d in both bases including hook errors; and
+that all 15 new records regenerate. Its findings:
+
+| Finding | Verified? | Action |
+|---|---|---|
+| "No effect we can resolve" ignored the d = 5, Z, p = 1e-3 cell (ratio 5.0, Fisher p = 0.002, significant after Bonferroni over 12) | yes, recomputed | RESULTS.md B2 now reports it as a cell-specific, unexplained difference |
+| Two Wilson lower bounds rounded wrongly; "nine comparisons" should be 12, eight with a ratio | yes | corrected |
+| Log-normal ratio intervals are unreliable at counts of 1 or 2 | yes | stated, with the exact interval for the 1-against-1 case |
+| The regeneration test covered only the 12 older records | yes | test now covers both files |
+| "10 to 25 times higher" and "about five times" were too broad | yes | replaced with the per-distance values |
+| `shortest_graphlike_error` ignores mechanisms flipping more than two detectors, so it does not prove the distance | yes (121 such mechanisms at d = 3) | claim reworded; a search that includes them added to the tests for d = 3, 5; noted for the surface-code owner |
+| Stale wording in `results/udaya/README.md`; unlabeled Stim cells in a table | yes | corrected |
+| Part C quoted the Z-basis d = 3 rate only and called all sampled results bounds | yes | corrected |

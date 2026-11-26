@@ -36,16 +36,23 @@ What I verified independently, at d = 3, 5, 7 and 9 in both bases (your tests st
 
 - 2d² − 1 atoms, one observable, r (d² − 1) detectors, 4 CNOT layers per round.
 - Noise-location counts match hand formulas for every channel (VALIDATION.md has the table).
-- Under the full noise model the shortest undetectable error has weight d, so the schedule keeps the
-  distance with preparation, measurement and idle errors included, not only CNOT errors.
+- Under the full noise model (preparation, measurement and idle errors included, not only CNOT
+  errors) the shortest undetectable graph-like error has weight d at all four distances. Note that
+  `shortest_graphlike_error`, which your test and mine both use, ignores error mechanisms that
+  flip more than two detectors, so on its own it is not a proof of the circuit distance. A bounded
+  search that includes them (`search_for_undetectable_logical_errors`) also found weight d and
+  nothing lighter at d = 3 and 5, and the independent reviewer reached the same conclusion.
 - Because you prepare and measure X ancillas directly, the circuit has no one-qubit gates: 516 noise
   locations per round at d = 9, against 596 for Stim's circuit. The analytic results were redone.
 
 Two observations from a small fixed-shot run (RESULTS.md B2), neither established:
 
-- At d = 5, p = 1e-3, the Z-basis memory failed 8 times in 200,000 shots and the X-basis memory 21
-  times. If that asymmetry is real it may come from the two CNOT orders; it needs more shots.
-- Tesseract took about five times longer per shot on your d = 9 circuit than on Stim's. The circuits
+- At d = 5, p = 1e-3, Z basis, your circuit failed 8 times in 200,000 shots where Stim's failed 8
+  times in 40,000 (Fisher exact p = 0.002). The X basis shows no such gap. It is one cell and is not
+  explained; worth reproducing with more shots.
+- In the same cell your Z-basis memory failed 8 times and your X-basis memory 21 times (p = 0.02,
+  not significant once the number of comparisons is allowed for).
+- Tesseract took five to seven times longer per shot on your d = 9 circuit than on Stim's. The circuits
   number qubits and detectors differently and Tesseract searches in detector order, so the detector
   ordering (or a matching decoder, which suits the surface code) is worth a look before large runs.
 
@@ -85,8 +92,9 @@ failures per cell):
 | surface d = 7, 9 | none in 40,000 | more than 10⁶; unknown |
 | bicycle [[42,6,6]] | 1 in 12,000 (both bases together) | of order 10⁶ |
 
-At p = 2e-3 the rates are 10 to 25 times higher (surface d = 5: 1.0e-3; d = 7: 1.5e-4), so the
-elevated-noise scenarios are the practical place to measure sensitivities.
+At p = 2e-3 the Z-basis rates are 4 times higher at d = 3 (7.5e-3) and 25 times higher at d = 5
+(1.0e-3), and failures become visible at d = 7 (1.5e-4), so the elevated-noise scenarios are the
+practical place to measure sensitivities.
 
 Decoder notes:
 

@@ -51,7 +51,7 @@ same code with the same 4-layer CNOT schedule depth, the same atoms and the same
 | Fault-budget factor, idle × 4 (surface) | **changed** | 1.34 | 1.40 |
 | "Bicycle chain is more exposed to two-qubit error than the surface code" | holds, with a smaller gap | 1.80 vs 1.48 | 1.80 vs 1.56 |
 | "The paper's idle channel never fires on the bicycle circuit, and does on the surface circuit" | holds | 68 idle locations per round | 68 |
-| Sampled logical failure of the surface memory | no resolvable change | see B2 | see B2 |
+| Sampled logical failure of the surface memory | agrees within 10% at d = 3; one d = 5 cell differs, unexplained | see B2 | see B2 |
 
 The earlier limitation "the surface circuit has 80 extra noise locations from Hadamard gates" no
 longer applies to the results; it now describes only the reference circuit.
@@ -211,8 +211,8 @@ reference records are the earlier ones in `validation_tesseract.jsonl`.
 | d | Scenario | Team circuit | 95% interval | Stim reference | reference / team (95%) |
 |---|---|---|---|---|---|
 | 3 | p = 1e-3, Z | 381 / 200,000 | 1.7e-3 to 2.1e-3 | 366 / 200,000 | 0.96 (0.83 to 1.11) |
-| 3 | p = 1e-3, X | 344 / 200,000 | 1.6e-3 to 1.9e-3 | 345 / 200,000 | 1.00 (0.86 to 1.16) |
-| 3 | p = 2e-3, Z | 1,503 / 200,000 | 7.2e-3 to 7.9e-3 | 1,380 / 200,000 | 0.92 (0.85 to 0.99) |
+| 3 | p = 1e-3, X | 344 / 200,000 | 1.5e-3 to 1.9e-3 | 345 / 200,000 | 1.00 (0.86 to 1.16) |
+| 3 | p = 2e-3, Z | 1,503 / 200,000 | 7.1e-3 to 7.9e-3 | 1,380 / 200,000 | 0.92 (0.85 to 0.99) |
 | 5 | p = 1e-3, Z | 8 / 200,000 | 2.0e-5 to 7.9e-5 | 8 / 40,000 | 5.0 (1.9 to 13) |
 | 5 | p = 1e-3, X | 21 / 200,000 | 6.9e-5 to 1.6e-4 | 5 / 40,000 | 1.2 (0.45 to 3.2) |
 | 5 | p = 2e-3, Z | 199 / 200,000 | 8.7e-4 to 1.1e-3 | 39 / 40,000 | 0.98 (0.70 to 1.4) |
@@ -223,27 +223,40 @@ reference records are the earlier ones in `validation_tesseract.jsonl`.
 | 9 | p = 1e-3, X | 0 / 40,000 | ≤ 9.6e-5 | 0 / 40,000 | |
 | 9 | p = 2e-3, Z | 1 / 40,000 | 4.4e-6 to 1.4e-4 | 1 / 40,000 | 1.0 (0.06 to 16) |
 
-The ratio interval is a log-normal approximation for two independent binomial counts.
+There are 12 matched comparisons. Eight have failures on both sides and a defined ratio; four are
+0 against 0. The ratio interval is a log-normal approximation for two independent binomial counts.
+It is exploratory: with counts of 1 or 2 it is unreliable (for 1 against 1 an exact conditional
+interval is 0.01 to 78, not 0.06 to 16), and a wide interval that contains 1 is not evidence that
+the circuits are equivalent.
 
 What this supports:
 
 - The team circuit decodes correctly at all four distances in both bases, and its failure rate falls
-  with distance as it should at p = 1e-3 (1.9e-3 at d = 3, 4e-5 to 1.1e-4 at d = 5, no failures in 40,000 shots at d = 7 and 9).
-- Where both circuits have enough failures to compare, their failure rates are the same within the
-  intervals (d = 3 in all three scenarios; d = 5 at p = 2e-3). Removing the Hadamard gates takes out
-  13% of the surface circuit's noise locations and has no effect we can resolve.
+  with distance as it should at p = 1e-3 (1.9e-3 in Z and 1.7e-3 in X at d = 3, 4e-5 to 1.1e-4 at
+  d = 5, no failures in 40,000 shots at d = 7 and 9).
+- At d = 3, where both circuits have hundreds of failures, their failure rates agree to within 10%
+  in all three scenarios, and at d = 5, p = 2e-3 they agree within the interval. Removing the
+  Hadamard gates takes out 13% of the surface circuit's noise locations; the sampled effect of that
+  is at most a few percent at d = 3.
+- One cell differs. At d = 5, Z basis, p = 1e-3 the team circuit failed 8 times in 200,000 shots and
+  the reference 8 times in 40,000: a ratio of 5.0 (1.9 to 13), Fisher exact p = 0.002, which stays
+  below 0.05 after a Bonferroni correction for 12 comparisons. This is a difference in that one
+  cell. It is not explained: the X basis at the same distance shows no such gap (ratio 1.2), and at
+  d = 3, p = 2e-3 the reference is the lower one by 8% (Fisher p = 0.02, not significant after
+  correction).
 
 What it does not support:
 
-- A claim that the team circuit is better. Two of the nine ratios exclude 1: d = 5, Z, p = 1e-3
-  favors the team circuit (8 failures on each side), and d = 3, p = 2e-3 favors the reference by 8%.
-  With nine comparisons, small counts in one and opposite signs, we treat neither as established.
-  The d = 5 Z-basis rate (8 in 200,000) is also below the X-basis rate (21 in 200,000) on the same
-  circuit; whether that is a real basis asymmetry needs more shots.
+- A general claim that the team circuit has a lower logical error rate than the reference, or that
+  the d = 5 difference is caused by the missing Hadamard gates. One cell with 8 failures a side
+  needs to be reproduced with more shots first.
+- A basis asymmetry in the team circuit. At d = 5, p = 1e-3 the Z basis failed 8 times and the X
+  basis 21 times in 200,000 shots each (Fisher p = 0.02, not significant after correction).
 - Any estimate at d = 7 or d = 9 for p = 1e-3: no failures were seen in 40,000 shots.
 
 A practical observation for production runs: Tesseract spent 590 to 1,580 s on a d = 9 cell of the
-team circuit against 120 to 210 s on the reference with the same shots and workers. The two circuits
+team circuit against 120 to 210 s on the reference with the same shots and workers (about 5 times
+longer at p = 1e-3 and 7.5 times at p = 2e-3). The two circuits
 number their qubits and detectors differently, and Tesseract's search follows detector order. The
 runs were not on an otherwise idle machine, so this is an indication to check, not a benchmark.
 
@@ -312,13 +325,15 @@ and 1.76. An idle error per round derived from T₂ = 1.5 s adds 5% and 7%.
 In an 18-round memory experiment on the [[42,6,6]] code at p = 10⁻³ we observed 0 failures in 6,000
 shots in the Z basis and 1 in 6,000 in the X basis, which bounds the failure probability per shot
 below 10⁻³ in each basis at 95% confidence. For the surface code under the same noise, with 3d
-rounds, the failure probability per shot was 1.9 × 10⁻³ at distance 3 and 4 × 10⁻⁵ (Z basis) and
-1.1 × 10⁻⁴ (X basis) at distance 5; no failures were observed in 40,000 shots at distances 7 and 9.
+rounds, the failure probability per shot was 1.9 × 10⁻³ (Z basis) and 1.7 × 10⁻³ (X basis) at
+distance 3, and 4 × 10⁻⁵ (Z) and 1.1 × 10⁻⁴ (X) at distance 5; no failures were observed in 40,000
+shots at distances 7 and 9.
 
 ### Limitations
 
 The sampled results are limited to memory experiments, to a decoder that differs from those of
-Ref. [paper], and to shot counts that give upper bounds rather than estimates; we do not reproduce
+Ref. [paper], and to shot counts that give estimates only for the distance-3 and distance-5 surface
+code and upper bounds elsewhere; we do not reproduce
 the logical error rates of Ref. [paper]. At the code sizes of interest the sampled failure rates are
 too low to rank the two codes. The comparison pairs a distance-9 surface code with a distance-6 bicycle-chain code, as
 in Ref. [paper], and so is not made at equal logical error rate; counts of fault locations compare

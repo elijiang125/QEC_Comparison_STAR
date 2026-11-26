@@ -1,9 +1,9 @@
 # Recorded results
 
 One JSON object per line, one line per experiment cell. Field definitions are in
-`docs/udaya/INTEGRATION.md`. Both files hold **provisional, decoder-dependent** data: neither uses
-the paper's decoders, and the surface-code cells use Stim's generated circuit as a stand-in. None of
-it is a reproduction of the paper's logical error rates.
+`docs/udaya/INTEGRATION.md`. All three sampling files hold **provisional, decoder-dependent** data:
+none uses the paper's decoders, and none is a reproduction of the paper's logical error rates. The
+two older files used Stim's generated surface circuit as a stand-in; the newest uses the team's.
 
 | File | Decoder | Design | Cells | Code revision |
 |---|---|---|---|---|

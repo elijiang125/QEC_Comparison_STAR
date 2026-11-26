@@ -100,9 +100,23 @@ def test_measurement_and_preparation_errors_reach_every_ancilla(d):
 
 
 @pytest.mark.parametrize("basis", BASES)
-def test_full_noise_model_keeps_the_code_distance(d, basis):
+def test_shortest_graphlike_error_has_weight_d_under_the_full_noise_model(d, basis):
+    """Necessary for distance d, not sufficient: Stim's graph-like search ignores error
+    mechanisms that flip more than two detectors (Y errors and some hook errors do)."""
     noisy = decorate_stim_memory(sc.memory_experiment(d, d, basis), NoiseProfile.paper())
     assert len(noisy.shortest_graphlike_error()) == d
+
+
+@pytest.mark.parametrize("basis", BASES)
+def test_search_including_hyperedges_finds_nothing_lighter_than_d(d, basis):
+    """A bounded search over all mechanisms, hyperedges included, for the small distances."""
+    if d > 5:
+        pytest.skip("the hyperedge search is run for d = 3 and 5; it is too slow beyond that")
+    noisy = decorate_stim_memory(sc.memory_experiment(d, d, basis), NoiseProfile.paper())
+    found = noisy.search_for_undetectable_logical_errors(
+        dont_explore_detection_event_sets_with_size_above=6, dont_explore_edges_with_degree_above=6,
+        dont_explore_edges_increasing_symptom_degree=False)
+    assert len(found) == d
 
 
 # ---------- against the Stim reference it replaces ----------
