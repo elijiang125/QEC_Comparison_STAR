@@ -78,7 +78,9 @@ def test_multi_pair_gate_is_one_layer():
     ("MPP X0*X1", "unsupported"),
     ("R 0 1\nM 0\nCX rec[-1] 1", "direct, non-inverted"),
     ("M !0", "direct, non-inverted"),
-    ("R 0 1 2\nCX 0 1 1 2", "overlapping"),
+    ("R 0 1 2\nCX 0 1 1 2", "repeated target"),
+    ("R 0 0", "repeated target"),
+    ("R 0\nM 0 0", "repeated target"),
     ("R 0 1\nTICK\nCX 0 1\nH 0", "overlapping"),
     ("R 0 1 2\nTICK\nCX 0 1\nM 2", "mixes two-qubit gates and measurements"),
 ])

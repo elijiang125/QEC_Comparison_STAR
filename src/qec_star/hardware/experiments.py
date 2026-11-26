@@ -112,10 +112,11 @@ def wilson_interval(failures: int, shots: int, z: float = 1.959963984540054):
 
 
 def per_round_rate(shot_failure: float, rounds: int) -> float:
-    """Per-round failure rate r with (1 - 2r)^rounds = 1 - 2P.
+    """Per-round flip rate r of ONE logical observable: (1 - 2r)^rounds = 1 - 2P.
 
-    Assumes independent, symmetric logical flips each round, so that an even
-    number of flips cancels. Valid for P < 1/2; a derived summary, not data.
+    Assumes independent, symmetric flips of that observable each round, so an
+    even number of flips cancels. Valid for P < 1/2. Do not apply it to the
+    "any observable failed" block rate, which is not a single parity bit.
     """
     if not 0 <= shot_failure < 0.5:
         raise ValueError("shot_failure must be in [0, 0.5)")
@@ -135,12 +136,13 @@ def _decode_chunk(circuit_text: str, decoder: dict, shots: int, seed: int):
 
 
 def source_commit() -> str:
-    """Current git commit, with '-dirty' if tracked files are modified."""
+    """Current git commit, with '-dirty' if the qec_star package has uncommitted changes."""
     try:
         root = Path(__file__).parent
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,
                               text=True, check=True).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=root,
+        # Only this package and the circuits it decorates decide the results.
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", str(root.parent)], cwd=root,
                                capture_output=True, text=True, check=True).stdout.strip()
         return head + ("-dirty" if dirty else "")
     except (OSError, subprocess.CalledProcessError):
@@ -152,7 +154,9 @@ class StopRule:
     """Stop once `max_failures` are seen or `max_shots` are spent.
 
     Chunks run in waves of `workers`; the rule is checked between waves, so
-    the shot count is a deterministic function of the seeds and this rule.
+    the shot count is a deterministic function of the seeds and this rule,
+    and can pass either limit by up to one wave (max_shots is rounded up to
+    whole chunks).
     Stopping on a failure count biases the estimate slightly upward
     (order 1/max_failures); with the default 100 this is about 1%.
     """

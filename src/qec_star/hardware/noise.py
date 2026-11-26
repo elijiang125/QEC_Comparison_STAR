@@ -85,6 +85,8 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
         if any(not t.is_qubit_target or t.is_inverted_result_target for t in targets):
             raise ValueError(f"only direct, non-inverted qubit targets supported: {name}")
         qs = [t.value for t in targets]
+        if len(set(qs)) != len(qs):
+            raise ValueError(f"repeated target within one {name} instruction")
         if not set(qs) <= allocated:
             raise ValueError(f"operation touches unallocated qubit: {name}")
         if any(args):
@@ -96,7 +98,7 @@ def decorate_stim_memory(circuit, profile: NoiseProfile, *, active_qubits=None):
             raise ValueError("a moment mixes two-qubit gates and measurements; insert TICK")
         # In an entangling layer every qubit may be used once, otherwise
         # "idle during the layer" is not well defined.
-        if "pair" in kinds and (len(set(qs)) != len(qs) or touched.intersection(qs)):
+        if "pair" in kinds and touched.intersection(qs):
             raise ValueError("overlapping operations in entangling moment; insert TICK")
         touched.update(qs)
 
